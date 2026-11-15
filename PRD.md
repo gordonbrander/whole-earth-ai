@@ -2,7 +2,7 @@
 
 ## TLDR
 
-Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, published on crates.io and as prebuilt binaries, that gives any AI tool offline access to Kiwix ZIM archives such as Wikipedia. It does three independent jobs: it **serves** archives over MCP (stdio), using Kiwix's own libzim for reading and full-text search; it **manages** the library (browse the Kiwix catalog, download, verify, update); and it **exports** articles as Markdown. It works with whatever AI tool you already use (Claude Code, Pi, Claude Desktop, LM Studio…) and needs no local model. The **Whole Earth drive** is an optional bundle built on top of it: a drive you plug into any Mac, Windows or Linux computer that holds a full offline copy of Wikipedia, `zim-mcp`, a small local model and llamafile to run it. You double-click a launcher, a chat page opens in your browser, and the model answers from the offline library, citing the articles it read, with no network and no install. The bundle is all existing software plus launchers and a justfile that assembles the drive from a pinned manifest. `zim-mcp` knows nothing about llamafile; the bundle only configures it.
+Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, published on crates.io and as prebuilt binaries, that gives any AI tool offline access to Kiwix ZIM archives such as Wikipedia. It does three independent jobs: it **serves** archives over MCP (stdio), using Kiwix's own libzim for reading and full-text search; it **manages** the library (browse the Kiwix catalog, download, verify, update), from the command line or from inside a chat, where every change needs the user's approval; and it **exports** articles as Markdown. It works with whatever AI tool you already use (Claude Code, Pi, Claude Desktop, LM Studio…) and needs no local model. The **Whole Earth drive** is an optional bundle built on top of it: a drive you plug into any Mac, Windows or Linux computer that holds a full offline copy of Wikipedia, `zim-mcp`, a small local model and llamafile to run it. You double-click a launcher, a chat page opens in your browser, and the model answers from the offline library, citing the articles it read, with no network and no install. The bundle is all existing software plus launchers and a justfile that assembles the drive from a pinned manifest. `zim-mcp` knows nothing about llamafile; the bundle only configures it.
 
 ## User stories
 
@@ -17,6 +17,7 @@ Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, publishe
 - **S9** As a developer with my own ZIM files and AI setup, I want to `cargo install zim-mcp`, so I can use the server and library manager without the drive.
 - **S10** When I want to use ZIM content outside Kiwix (a notes app, grep, a static site, my own indexing pipeline), I want to export one article, a list of articles or a whole archive as Markdown files, so the knowledge isn't locked inside one file format.
 - **S11** As a Claude Code or Pi user, I want to download only the `zim-mcp` binary and register it with my agent, so my agent can search offline Wikipedia without a local model or the drive.
+- **S12** When I'm chatting with my AI, I want to ask it to find and download an archive (or update or remove one), and approve the change myself, so I can manage the library without leaving the conversation and without the AI acting on its own.
 
 ## Goals
 
@@ -39,7 +40,7 @@ Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, publishe
 - Torrent downloads, or downloading from several mirrors in parallel.
 - Creating or editing ZIM files.
 - Exporting to formats other than Markdown (HTML, PDF, EPUB). `zimdump` from zim-tools already dumps raw HTML.
-- Letting the model download, delete or otherwise change files.
+- Letting the model change the library without the user's explicit approval for that specific change.
 - Network-exposed or multi-user deployments. Everything stays on localhost.
 - Choosing or tuning a model beyond picking one default from an evaluation.
 - Binaries with a permissive license. `zim-mcp` is GPL-3.0-or-later throughout.
@@ -49,11 +50,12 @@ Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, publishe
 ### Serving (`zim-mcp serve`)
 
 - MUST serve all ZIM archives in a given directory over MCP using the stdio transport. (S1, S4, S9)
+- MUST speak both the stateless 2026-07-28 MCP protocol and the older `initialize` handshake. llama.cpp's stdio client, and so llamafile 0.10.6, still sends `initialize` at 2024-11-05. (S1, S4, S11)
 - MUST offer a full-text search tool covering every archive, and a tool that reads an article by ID. (S1, S4)
 - MUST include, in every search result and article read, the archive name, article title and a stable article ID the model can quote. (S3)
 - MUST keep tool output small enough for a small model's context: short snippets, and long articles split into pages with a way to ask for the next page. (S1)
 - MUST work with unmodified Kiwix ZIMs with no import or indexing step, and fall back to title suggestions for archives without a full-text index. (S1, S5)
-- MUST be read-only: no MCP tool writes files or uses the network. (S2, S4)
+- MUST keep the search, read and list tools read-only and offline. Only the library tools may use the network or change files. (S2, S4)
 - MUST start up and answer one tool call fast enough that llama-server starting `zim-mcp` fresh for each call feels instant. Target: under 500 ms with the 119 GiB maxi archive on a USB SSD. (S1)
 - MUST ignore files that are mid-download (`*.part`). (S6)
 - SHOULD return Markdown converted from the article's HTML, using the same conversion as export, so headings and lists survive. (S1, S10)
@@ -62,7 +64,7 @@ Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, publishe
 - MAY offer title suggestions and a tool that lists an article's links. (S1)
 - SHOULD offer the same operations as plain CLI commands (`zim-mcp search`, `zim-mcp read`, `zim-mcp list`) printing Markdown, or JSON with `--json`, for agents and scripts that prefer CLI tools to MCP. (S11)
 
-### Library (`zim-mcp library`)
+### Library (`zim-mcp library` and MCP)
 
 - MUST search the Kiwix online catalog by name, language and category. (S5)
 - MUST add an archive by catalog name (newest version) or by a direct URL. (S5)
@@ -72,6 +74,12 @@ Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, publishe
 - MUST list and remove archives on the drive. (S5)
 - SHOULD show download progress and an estimated time remaining. (S5)
 - MAY try the other mirrors listed in the metalink when one fails. (S6)
+- MUST offer the library operations over MCP as well as the CLI: catalog search, list and status without approval; add, update and remove only with approval. (S12)
+- MUST get the user's explicit approval for every add, update and remove requested over MCP, through MCP elicitation, showing the archive, its download size and anything that will be deleted. The model can never approve on the user's behalf. (S2, S12)
+- MUST refuse a change when the client can't ask the user, and return the equivalent CLI command instead, unless the user started the server with `--trust-client-approval` (meaning: rely on the client's own per-call permission prompt). (S2, S12)
+- MUST run approved downloads in the background and return immediately, because MCP tool calls time out (llama.cpp's default is 30 s) and a download can take hours; offer a status tool reporting progress. (S12)
+- SHOULD mark every tool with MCP annotations (`readOnlyHint`, `destructiveHint`, `openWorldHint`) so clients can apply their own permission prompts too. (S12)
+- SHOULD let the library tools be hidden at serve time (`--no-library`), because small models do worse with longer tool lists. (S1, S12)
 
 ### Export (`zim-mcp export`)
 
@@ -104,10 +112,6 @@ Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, publishe
 - MUST include the licenses and attributions for everything else on the drive: Wikipedia CC BY-SA, the model's license, and llamafile's license. (S7)
 - SHOULD tell the model to search before answering and to cite the articles it read. (S3)
 - MAY fall back to running the binaries from a temp folder when Linux mounts the drive without permission to execute. (S1)
-
-### Future
-
-- MAY offer a terminal chat (`zim-mcp chat`, in the style of Claude Code) as an alternative to the web UI. It would call llamafile's OpenAI-compatible API and run the ZIM tools in-process, because llamafile's own terminal chat (`--chat`) and agentfile can't use MCP tools today. If upstream agentfile gains MCP support, use that instead. (S1, S3)
 
 ## Proposal
 
@@ -165,7 +169,7 @@ WHOLE-EARTH/
   LICENSES/                           # GPL-3.0 + source offer, CC BY-SA, model, llamafile
 ```
 
-**Runtime flow.** The launcher detects the OS and CPU type, then runs llamafile in server mode on `127.0.0.1` with `-m models/model.gguf` and `--mcp-servers-json '{"mcpServers":{"wiki":{"command":"<drive>/bin/<os>/zim-mcp","args":["serve","<drive>/zim"]}}}'`, and opens `http://127.0.0.1:8080`. llama-server starts `zim-mcp serve` once to list its tools, then again for each tool call. The model sees `wiki_search`, `wiki_read`, `wiki_list_archives`.
+**Runtime flow.** The launcher detects the OS and CPU type, then runs llamafile in server mode on `127.0.0.1` with `-m models/model.gguf` and `--mcp-servers-json '{"mcpServers":{"wiki":{"command":"<drive>/bin/<os>/zim-mcp","args":["serve","<drive>/zim"]}}}'`, and opens `http://127.0.0.1:8080`. llama-server starts `zim-mcp serve` once to list its tools, then again for each tool call. The model sees `wiki_search`, `wiki_read`, `wiki_list_archives`. Whether the drive exposes the library tools depends on the llama.cpp approval question under Open questions. Until then the launcher passes `--no-library`, and drive users manage the library with the CLI.
 
 **`zim-mcp serve` tools** (kept small, because small models misuse long tool lists):
 - `search(query, archive?, limit=5)` → for each hit: `{archive, title, id, snippet}`. Uses libzim's full-text search, which searches several archives together when they share a language. Archives without a full-text index fall back to libzim's title suggestions.
@@ -189,7 +193,9 @@ zim-mcp library remove <name>
 - The catalog is Kiwix's OPDS feed (`library.kiwix.org/catalog/v2/entries`). Each entry links to a `.meta4` metalink file giving the exact size, the sha256 and a list of mirrors.
 - Download sequence: download to `name_YYYY-MM.zim.part` with HTTP Range resume, computing the sha256 while streaming, check it, then rename into place. `update` does this for each archive with a newer catalog date, then deletes the old file.
 - There's no database. The `zim/` folder is the library, and the version comes from the filename (`<name>_<YYYY-MM>.zim`).
-- These are CLI commands only, never MCP tools.
+- Over MCP, the same operations are tools: `library_search`, `library_list`, `library_status` (no approval), and `library_add`, `library_update`, `library_remove` (approval required).
+- **Approval:** each change tool sends an `elicitation/create` confirmation ("Download wikipedia_en_all_maxi (119 GiB) to zim/? This replaces wikipedia_en_all_maxi_2026-02.zim.") and acts only on the user's "accept". If the client doesn't support elicitation, the tool returns an error with the CLI command to run, unless `--trust-client-approval` was given.
+- **Background downloads:** an approved add/update starts a detached `zim-mcp library add …` process and returns at once. That process is the same code path as the CLI. It saves the `.meta4` beside the `.part` file, so `library_status` reads progress straight from the files (`.part` size vs. size in `.meta4`). No daemon and no state outside the `zim/` folder.
 
 **`zim-mcp export`**
 
@@ -203,7 +209,7 @@ zim-mcp export <archive.zim> --all --out <dir>             # whole archive
 - HTML → Markdown with `htmd`, the same converter `read` uses. Links to other articles become relative `.md` links; links outside the archive stay as they are. Redirects become a short file pointing to the target article.
 - CLI only, never an MCP tool (it writes files).
 
-**Crates.** `rmcp` (+ `tokio`), `cxx`/`cxx-build`, `ureq` (downloads), `sha2`, `quick-xml` (OPDS and `.meta4`), `htmd` (HTML → Markdown; front matter is a few quoted strings, written by hand), `clap`, `indicatif`, `serde_json`.
+**Crates.** `rmcp` (+ `tokio`; the official Rust MCP SDK, which negotiates every protocol version from 2024-11-05 to the stateless 2026-07-28 over stdio, so moving to the new protocol is a version bump), `cxx`/`cxx-build`, `ureq` (downloads), `sha2`, `quick-xml` (OPDS and `.meta4`), `htmd` (HTML → Markdown; front matter is a few quoted strings, written by hand), `clap`, `indicatif`, `serde_json`.
 
 **Build and assembly**
 - `build.rs`: if `LIBZIM_DIR` is set, use that prebuilt libzim; otherwise find a system libzim with pkg-config (crates.io users: `brew install libzim`, `apt install libzim-dev`). Compile the shim with `cxx_build`, link `-lzim`, and make `zim-mcp` look for libzim next to itself (`@executable_path` on macOS, `$ORIGIN` on Linux; Windows already does).
@@ -211,7 +217,7 @@ zim-mcp export <archive.zim> --all --out <dir>             # whole archive
 - `just fetch` (drive only): downloads llamafile, the model and the `zim-mcp` release archives listed in `bundle/manifest.sha256` and checks them with `shasum -a 256 -c`.
 - `just assemble <dest>` (drive only): lays out the folders, unpacks the `zim-mcp` release archives into `bin/<os>/`, copies launchers and licenses, and runs `zim-mcp library add` for each ZIM in the manifest.
 
-**Code shape.** One crate, one binary, these modules: `zim` (the libzim binding), `markdown` (HTML → Markdown and link rewriting, pure functions), `tools` (search, read, list, built on `zim` + `markdown`), `mcp` and `cli` (two thin front ends exposing the same `tools`), `export` (built on `zim` + `markdown`), and `library` (catalog and downloads). `library` doesn't use the others; it only shares the archive folder convention and the filename parser. Nothing in the crate refers to llamafile or the drive.
+**Code shape.** One crate, one binary, these modules: `zim` (the libzim binding), `markdown` (HTML → Markdown and link rewriting, pure functions), `tools` (search, read, list, built on `zim` + `markdown`), `mcp` and `cli` (two thin front ends exposing the same `tools` and `library` operations; `mcp` adds the approval step), `export` (built on `zim` + `markdown`), and `library` (catalog and downloads). `library` doesn't use the others; it only shares the archive folder convention and the filename parser. Nothing in the crate refers to llamafile or the drive.
 
 **Licensing.** `zim-mcp` source and binaries: GPL-3.0-or-later (libzim's GPL-2.0-or-later allows this; GPL-3 also accepts the Apache-2.0 Rust dependencies). Binaries ship with the license text and a source offer. llamafile, the model and the ZIM content are separate programs and data, connected over stdio MCP, so libzim's license doesn't extend to them.
 
@@ -233,7 +239,15 @@ The proposal uses existing software for everything except the one missing piece:
 
 **Our own agent loop and terminal chat (`zim-mcp chat`).** Gives full control over prompts and trimming context. But it ties retrieval to orchestration and UI, which llamafile already provides. llamafile's terminal chat and agentfile can't use MCP, so a terminal interface means this loop. It's deferred to a future MAY, and if built, it should be its own module calling the same ZIM functions, not woven into `mcp`.
 
+**Library over CLI only.** Simplest and safest, but forces users out of the conversation to grow the library (S12).
+
+**Two-step confirm in the tool itself** (the tool returns a plan and a token; a second call with the token goes ahead). No client support needed, but the model can make the second call itself, so it isn't the user's approval.
+
+**Rely on each client's own tool-permission prompt.** Claude Code and others prompt per call, but not every client does, and auto-approve settings would make downloads silent. Kept only as the explicit `--trust-client-approval` opt-in.
+
 **Export with existing tools: `zimdump` + pandoc.** The most boring route to Markdown. But it's two more tools to install, it writes millions of intermediate HTML files, it doesn't rewrite links or add attribution front matter, and its output wouldn't match what the model sees through `read`. Using one converter for both keeps "what the AI read" and "what you exported" the same text.
+
+**Hand-written JSON-RPC instead of `rmcp`.** About 200 lines with no tokio, but we would have to track every spec change and keep both the stateless and `initialize` paths working ourselves. Worth reconsidering only if `rmcp` adds noticeably to build time or binary size.
 
 **MCP over HTTP + the web UI's CORS proxy.** Needed before llama.cpp could launch stdio servers. It ties serving to network setup (ports, CORS, a manual connection step in the UI). Now unnecessary.
 
@@ -262,6 +276,8 @@ The proposal uses existing software for everything except the one missing piece:
 - kiwix-mcp wrappers around kiwix-serve: https://github.com/OscillateLabsLLC/kiwix-mcp, https://github.com/roanpy/kiwix-mcp
 - llama.cpp stdio MCP servers in llama-server: https://github.com/ggml-org/llama.cpp/pull/26062
 - llamafile: https://github.com/mozilla-ai/llamafile
+- `rmcp`, the official Rust MCP SDK: https://github.com/modelcontextprotocol/rust-sdk
+- MCP 2026-07-28 (stateless) spec: https://modelcontextprotocol.io/specification/2026-07-28
 - GPL FAQ on linking vs. separate programs: https://www.gnu.org/licenses/gpl-faq.html#MereAggregation
 
 ## Open questions
@@ -279,4 +295,5 @@ The proposal uses existing software for everything except the one missing piece:
 - **Which archives besides English Wikipedia ship by default** (Wiktionary, Wikivoyage, WikiMed, Stack Exchange)? What about other languages?
 - **Markdown quality for Wikipedia's harder parts:** infoboxes, complex tables, math (MathML/SVG), footnotes and navboxes. Strip some of these before conversion, and should `read` and `export` strip the same things?
 - **Pi and MCP:** secondary sources say Pi added a native MCP client in 1.0 (earlier versions deliberately had none). Confirm against the official docs; the CLI commands cover Pi either way.
+- **Elicitation support across clients:** do Claude Code, Pi, Claude Desktop and LM Studio support MCP elicitation? llama-server's stdio MCP code doesn't appear to. Does its web UI ask permission before calling MCP tools, which would justify `--trust-client-approval` on the drive?
 - **How does the chat UI show citations:** does the web UI show tool results clearly enough for S3, or do we need a citation format in the system prompt?
