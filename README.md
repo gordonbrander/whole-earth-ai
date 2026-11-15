@@ -51,27 +51,27 @@ Pass `--no-library` to hide the library tools; small models do better with fewer
 **Claude Code**
 
 ```sh
-claude mcp add wiki -- zim-mcp serve ~/zim
+claude mcp add wiki -- zim-mcp serve --dir ~/zim
 ```
 
 **Claude Desktop / LM Studio / Jan** — add to the app's MCP config
 (`claude_desktop_config.json`, LM Studio's `mcp.json`):
 
 ```json
-{ "mcpServers": { "wiki": { "command": "/path/to/zim-mcp", "args": ["serve", "/path/to/zim"] } } }
+{ "mcpServers": { "wiki": { "command": "/path/to/zim-mcp", "args": ["serve", "--dir", "/path/to/zim"] } } }
 ```
 
 **Pi, or any agent that prefers CLI tools** — the same operations as commands,
 printing Markdown (or JSON with `--json`):
 
 ```sh
-zim-mcp search ~/zim "photosynthesis"
-zim-mcp read ~/zim wikipedia_en_all_nopic/Photosynthesis --page 2
-zim-mcp read ~/zim wikipedia_en_all_nopic/Photosynthesis --section "Evolution"
-zim-mcp list ~/zim
+zim-mcp search "photosynthesis" --dir ~/zim
+zim-mcp read wikipedia_en_all_nopic/Photosynthesis --page 2 --dir ~/zim
+zim-mcp read wikipedia_en_all_nopic/Photosynthesis --section "Evolution" --dir ~/zim
+zim-mcp list --dir ~/zim
 ```
 
-**llama.cpp / llamafile** — `--mcp-servers-json '{"mcpServers":{"wiki":{"command":"zim-mcp","args":["serve","/path/to/zim","--no-library"]}}}'`
+**llama.cpp / llamafile** — `--mcp-servers-json '{"mcpServers":{"wiki":{"command":"zim-mcp","args":["serve","--dir","/path/to/zim","--no-library"]}}}'`
 
 ### Approving library changes
 
