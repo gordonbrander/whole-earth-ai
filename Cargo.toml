@@ -1,6 +1,6 @@
 [package]
 name = "zim-mcp"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Offline access to Kiwix ZIM archives (Wikipedia etc.) for any AI tool: MCP server, library manager and Markdown export"
