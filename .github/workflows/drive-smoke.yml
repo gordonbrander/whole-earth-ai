@@ -79,7 +79,7 @@ jobs:
             -d '{"tool":"wiki_search","params":{"query":"Georgia on My Mind"}}' -o result.json; head -c 400 result.json; echo
           grep -q 'wikipedia_en_ray-charles_mini/Georgia_on_My_Mind' result.json
           curl -sf -X POST http://127.0.0.1:8080/tools -H 'Content-Type: application/json' \
-            -d '{"tool":"wiki_read","params":{"id":"wikipedia_en_ray-charles_mini/Ray_Charles"}}' | grep -q 'page 1 of'
+            -d '{"tool":"wiki_read","params":{"id":"wikipedia_en_ray-charles_mini/Ray_Charles"}}' | grep 'page 1 of' >/dev/null  # not -q: it stops reading and curl gets SIGPIPE
           echo "drive works on ${{ matrix.os }}"
       - if: always()
         run: cat launcher.log 2>/dev/null | tail -40 || true
