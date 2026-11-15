@@ -26,7 +26,7 @@ if ! "$BIN/zim-mcp" --version >/dev/null 2>&1; then
 fi
 CONFIG="${TMPDIR:-/tmp}/whole-earth-mcp.json"
 cat > "$CONFIG" <<JSON
-{"mcpServers":{"wiki":{"command":"$BIN/zim-mcp","args":["serve","$DRIVE/zim","--no-library"]}}}
+{"mcpServers":{"wiki":{"command":"$BIN/zim-mcp","args":["serve","--dir","$DRIVE/zim","--no-library"]}}}
 JSON
 (until curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 || wget -qO /dev/null "http://127.0.0.1:$PORT/health" 2>/dev/null; do sleep 1; done
  xdg-open "http://127.0.0.1:$PORT" >/dev/null 2>&1 || echo "Open http://127.0.0.1:$PORT in your browser.") &
