@@ -1,0 +1,40 @@
+{"q": "In what year did the Chernobyl nuclear disaster happen?", "expect": ["1986"]}
+{"q": "Who wrote the novel One Hundred Years of Solitude?", "expect": ["García Márquez", "Garcia Marquez"]}
+{"q": "What is the capital of Burkina Faso?", "expect": ["Ouagadougou"]}
+{"q": "What is the chemical symbol for tungsten?", "expect": ["W"]}
+{"q": "Which river flows through Baghdad?", "expect": ["Tigris"]}
+{"q": "How many bones are in the adult human body?", "expect": ["206"]}
+{"q": "Who was the first woman to win a Nobel Prize?", "expect": ["Marie Curie", "Curie"]}
+{"q": "What is the boiling point of water at sea level in Fahrenheit?", "expect": ["212"]}
+{"q": "In which country is the Atacama Desert?", "expect": ["Chile"]}
+{"q": "What language family does Finnish belong to?", "expect": ["Uralic", "Finno-Ugric"]}
+{"q": "Who painted The Garden of Earthly Delights?", "expect": ["Bosch"]}
+{"q": "What is the treatment of first choice for anaphylaxis?", "expect": ["epinephrine", "adrenaline"]}
+{"q": "What year was the Treaty of Westphalia signed?", "expect": ["1648"]}
+{"q": "What is the largest moon of Saturn?", "expect": ["Titan"]}
+{"q": "Which element has atomic number 79?", "expect": ["gold", "Gold"]}
+{"q": "Who composed the opera The Magic Flute?", "expect": ["Mozart"]}
+{"q": "What is the main ingredient of traditional Japanese miso?", "expect": ["soybean", "soybeans", "soy"]}
+{"q": "In which year did Ray Charles die?", "expect": ["2004"]}
+{"q": "What is the SI unit of electrical capacitance?", "expect": ["farad"]}
+{"q": "What is the official language of Brazil?", "expect": ["Portuguese"]}
+{"q": "How does oral rehydration solution treat dehydration from diarrhea?", "expect": ["glucose", "sodium", "salt", "sugar"]}
+{"q": "What is the deepest point in the world's oceans?", "expect": ["Challenger Deep", "Mariana"]}
+{"q": "Who proposed the theory of continental drift?", "expect": ["Wegener"]}
+{"q": "What is the half-life of carbon-14, approximately?", "expect": ["5,730", "5730", "5,700", "5700"]}
+{"q": "What is the name of the main settlement on Tristan da Cunha?", "expect": ["Edinburgh of the Seven Seas"]}
+{"q": "How high is the highest point of Tristan da Cunha, in metres?", "expect": ["2,062", "2062"]}
+{"q": "In which national park is Mount Thor in Nunavut?", "expect": ["Auyuittuq"]}
+{"q": "How far is Mount Thor from Pangnirtung, in kilometres?", "expect": ["46"]}
+{"q": "Who first spotted Bouvet Island, and in what year?", "expect": ["1739"]}
+{"q": "What name did the British whaler James Lindsay give Bouvet Island?", "expect": ["Lindsay Island"]}
+{"q": "What percentage of Bouvet Island is covered by a glacier?", "expect": ["93"]}
+{"q": "What is the largest settlement in the Kerguelen Islands?", "expect": ["Port-aux-Français", "Port-aux-Francais", "Port aux Français"]}
+{"q": "What was the permanent population of the Pitcairn Islands in 2023?", "expect": ["35"]}
+{"q": "What currency is used in the Pitcairn Islands?", "expect": ["New Zealand dollar"]}
+{"q": "What is the largest city of Nauru?", "expect": ["Denigomodu"]}
+{"q": "What was Tuvalu's population in the 2022 census?", "expect": ["10,643", "10643"]}
+{"q": "What is the capital of the island of Socotra?", "expect": ["Hadibu"]}
+{"q": "On what date were Ötzi's remains discovered?", "expect": ["19 September 1991", "September 19, 1991"]}
+{"q": "How many meshing bronze gears did the 2005 Cardiff scans suggest the Antikythera mechanism had?", "expect": ["37"]}
+{"q": "What is the maximum depth of Lake Baikal in metres?", "expect": ["1,642", "1642"]}
