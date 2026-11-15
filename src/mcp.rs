@@ -1,9 +1,9 @@
-//! MCP front end (stdio). Exposes `tools` (read-only, offline) and the
-//! `library` operations; changes to the library need the user's approval
-//! through MCP elicitation.
+//! MCP front end (stdio). Exposes `tools` (read-only, offline), the
+//! `library` operations and `export`; anything that writes files needs the
+//! user's approval through MCP elicitation.
 
 use crate::library::{self, download};
-use crate::tools;
+use crate::{export, tools};
 use rmcp::{
     ErrorData, RoleServer, ServerHandler, ServiceExt,
     handler::server::{
@@ -17,7 +17,8 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone)]
 pub struct Server {
@@ -67,6 +68,14 @@ pub struct UpdateArgs {
     /// Archives to update; all of them if empty.
     #[serde(default)]
     names: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ExportArgs {
+    /// Article ids from search, e.g. `wikipedia_en_all_maxi/Albert_Einstein`.
+    ids: Vec<String>,
+    /// Absolute path of the folder to write the Markdown files into.
+    out: String,
 }
 
 fn text(s: impl Into<String>) -> CallToolResult {
@@ -377,6 +386,101 @@ impl Server {
             Approval::Refused(why) => Ok(fail(why).into()),
         }
     }
+
+    #[tool(
+        description = "Save articles (ids from search) as Markdown files with attribution front matter in a folder. Asks the user to approve first.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn export(
+        &self,
+        ctx: RequestContext<RoleServer>,
+        Parameters(a): Parameters<ExportArgs>,
+        RequestState(state): RequestState,
+        InputResponses(responses): InputResponses,
+    ) -> Result<CallToolResponse, ErrorData> {
+        if a.ids.is_empty() {
+            return Ok(fail("Give at least one article id.").into());
+        }
+        let out = PathBuf::from(&a.out);
+        if !out.is_absolute() {
+            return Ok(fail(format!("`out` must be an absolute path, not {:?}.", a.out)).into());
+        }
+        // Sorted, so the approval message (the request state) is the same on retry.
+        let mut by_archive: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for id in &a.ids {
+            match tools::parse_id(id) {
+                Ok((name, path)) => by_archive
+                    .entry(name.to_string())
+                    .or_default()
+                    .push(path.to_string()),
+                Err(e) => return Ok(fail(e).into()),
+            }
+        }
+        let newest = library::newest(&self.dir).unwrap_or_default();
+        let mut jobs: Vec<(PathBuf, Vec<String>)> = vec![];
+        for (name, paths) in by_archive {
+            let Some(archive) = newest.iter().find(|x| x.name == name) else {
+                return Ok(fail(format!("No archive named {name:?}; see list_archives.")).into());
+            };
+            jobs.push((archive.path.clone(), paths));
+        }
+        let message = format!(
+            "Export {} article(s) as Markdown to {}?\n{}",
+            a.ids.len(),
+            out.display(),
+            jobs.iter()
+                .map(|(f, p)| format!(
+                    "{}: {}",
+                    f.file_name().unwrap().to_string_lossy(),
+                    p.join(", ")
+                ))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let cli = jobs
+            .iter()
+            .map(|(f, p)| {
+                format!(
+                    "zim-mcp export {:?} {} --out {:?}",
+                    f.display().to_string(),
+                    p.iter()
+                        .map(|p| format!("{p:?}"))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    out.display().to_string()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n    ");
+        match self.approve(&ctx, &message, &cli, state, responses).await {
+            Approval::Approved => Ok(done(blocking(move || run_export(&jobs, &out)).await).into()),
+            Approval::Ask(r) => Ok(r.into()),
+            Approval::Refused(why) => Ok(fail(why).into()),
+        }
+    }
+}
+
+fn run_export(jobs: &[(PathBuf, Vec<String>)], out: &Path) -> Result<String, String> {
+    let mut s = export::Stats::default();
+    for (archive, paths) in jobs {
+        let t = export::export(archive, paths, false, out, false)?;
+        s.written += t.written;
+        s.redirects += t.redirects;
+        s.skipped_existing += t.skipped_existing;
+        s.skipped_non_article += t.skipped_non_article;
+    }
+    Ok(format!(
+        "Exported to {}: {} articles, {} redirects written; {} already existed; {} non-articles skipped.",
+        out.display(),
+        s.written,
+        s.redirects,
+        s.skipped_existing,
+        s.skipped_non_article
+    ))
 }
 
 impl Server {
