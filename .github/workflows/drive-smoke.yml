@@ -5,11 +5,12 @@
 name: drive-smoke
 
 on:
+  pull_request:
+    paths: ["bundle/**", ".github/workflows/drive-smoke.yml"]
   workflow_dispatch:
     inputs:
       tag:
-        description: zim-mcp release to test
-        default: v0.1.0
+        description: zim-mcp release to test (default, the one pinned in the manifest)
 
 env:
   MODEL_URL: https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/50968a4468ef4233ed78cd7c3de230dd1d61a56b/Qwen3-0.6B-Q4_K_M.gguf
@@ -39,8 +40,11 @@ jobs:
           set -euo pipefail
           sum() { if command -v sha256sum >/dev/null; then sha256sum -c; else shasum -a 256 -c; fi; }
           d=drive; mkdir -p "$d/bin" "$d/models" "$d/zim" dl
+          tag="${{ inputs.tag }}"
+          [ -n "$tag" ] || tag=$(grep -o 'releases/download/v[^/]*' bundle/manifest.sha256 | head -1 | cut -d/ -f3)
+          echo "testing zim-mcp $tag"
           # zim-mcp release, unmodified, checked against its SHA256SUMS
-          gh release download "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" --dir dl --pattern "*-${{ matrix.bin }}.${{ matrix.ext }}" --pattern SHA256SUMS
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir dl --pattern "*-${{ matrix.bin }}.${{ matrix.ext }}" --pattern SHA256SUMS
           (cd dl && grep -- "-${{ matrix.bin }}" SHA256SUMS | sum)
           a=$(find dl -name "zim-mcp-*-${{ matrix.bin }}.${{ matrix.ext }}"); stem=$(basename "$a" .${{ matrix.ext }})
           if [ "${{ matrix.ext }}" = zip ]; then unzip -q "$a" -d dl; else tar xzf "$a" -C dl; fi
