@@ -8,7 +8,7 @@ DRIVE="$PWD"
 PORT=8080
 CONFIG="${TMPDIR:-/tmp}/whole-earth-mcp.json"
 cat > "$CONFIG" <<JSON
-{"mcpServers":{"wiki":{"command":"$DRIVE/bin/macos-universal/zim-mcp","args":["serve","$DRIVE/zim","--no-library"]}}}
+{"mcpServers":{"wiki":{"command":"$DRIVE/bin/macos-universal/zim-mcp","args":["serve","--dir","$DRIVE/zim","--no-library"]}}}
 JSON
 (until curl -sf "http://127.0.0.1:$PORT/health" >/dev/null; do sleep 1; done; open "http://127.0.0.1:$PORT") &
 echo "Starting… the chat page opens in your browser when it's ready. Close this window to stop."
