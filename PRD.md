@@ -143,7 +143,7 @@ zim-mcp search ~/zim "photosynthesis"                   # any agent or script th
 **Repo layout** (one repo, one crate at the root; everything drive-specific lives under `bundle/`)
 
 ```
-whole-earth-ai/
+zim-mcp/
   Cargo.toml        # package "zim-mcp", license "GPL-3.0-or-later", include = ["src/**", "README.md", "LICENSE"]
   src/              # main.rs, zim/ (cxx bridge + shim.cpp), markdown.rs, tools.rs, mcp.rs, cli.rs, export.rs, library/
   .github/workflows/release.yml   # builds zim-mcp release archives
