@@ -21,6 +21,7 @@ struct Cli {
 enum Command {
     /// Serve the archives in DIR over MCP (stdio).
     Serve {
+        #[arg(long, default_value = ".")]
         dir: PathBuf,
         /// Hide the library tools (fewer tools suit small models).
         #[arg(long)]
@@ -31,6 +32,7 @@ enum Command {
     },
     /// Full-text search across the archives in DIR.
     Search {
+        #[arg(long, default_value = ".")]
         dir: PathBuf,
         query: String,
         #[arg(long)]
@@ -42,6 +44,7 @@ enum Command {
     },
     /// Read an article by id (`<archive>/<path>`) as Markdown.
     Read {
+        #[arg(long, default_value = ".")]
         dir: PathBuf,
         id: String,
         #[arg(long, default_value_t = 1)]
@@ -53,6 +56,7 @@ enum Command {
     },
     /// List the archives in DIR.
     List {
+        #[arg(long, default_value = ".")]
         dir: PathBuf,
         #[arg(long)]
         json: bool,
@@ -94,7 +98,7 @@ enum LibraryCommand {
     Add {
         #[arg(required = true)]
         specs: Vec<String>,
-        #[arg(long, default_value = "zim")]
+        #[arg(long, default_value = ".")]
         dir: PathBuf,
         /// Delete the archive's other versions once the new one is verified.
         #[arg(long)]
@@ -105,24 +109,24 @@ enum LibraryCommand {
     },
     /// List the archive files.
     List {
-        #[arg(long, default_value = "zim")]
+        #[arg(long, default_value = ".")]
         dir: PathBuf,
     },
     /// Replace archives with their newest catalog versions.
     Update {
         names: Vec<String>,
-        #[arg(long, default_value = "zim")]
+        #[arg(long, default_value = ".")]
         dir: PathBuf,
     },
     /// Delete an archive (every version of it).
     Remove {
         name: String,
-        #[arg(long, default_value = "zim")]
+        #[arg(long, default_value = ".")]
         dir: PathBuf,
     },
     /// Show downloads in progress.
     Status {
-        #[arg(long, default_value = "zim")]
+        #[arg(long, default_value = ".")]
         dir: PathBuf,
     },
 }

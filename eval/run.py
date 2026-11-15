@@ -19,7 +19,7 @@ class Mcp:
     tools, descriptions and outputs any MCP client gets."""
 
     def __init__(self, zim_mcp, zim):
-        self.p = subprocess.Popen([zim_mcp, "serve", zim, "--no-library"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        self.p = subprocess.Popen([zim_mcp, "serve", "--dir", zim, "--no-library"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         self.id = 0
         init = self.call("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "eval", "version": "1"}})
         self.instructions = init.get("instructions", "")  # what an MCP host shows the model
