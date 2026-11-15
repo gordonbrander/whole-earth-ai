@@ -16,10 +16,10 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - { name: macos-arm64, os: macos-14, target: aarch64-apple-darwin,
+          - { name: macos-arm64, os: macos-latest, target: aarch64-apple-darwin,
               libzim: libzim_macos-arm64, ext: tar.gz, sha256: e8d7350506fe184a7c2d9e27899f107623caa1a6912c44c8a09a86747b58ce06 }
           # Cross-compiled on Apple Silicon: GitHub is retiring Intel macOS runners.
-          - { name: macos-x64, os: macos-14, target: x86_64-apple-darwin, cross: true,
+          - { name: macos-x64, os: macos-latest, target: x86_64-apple-darwin, cross: true,
               libzim: libzim_macos-x86_64, ext: tar.gz, sha256: 23b98ee69f97f67f4d9a977bd1cb9aed10cf46b2439bdf25c28bd73d24551193 }
           - { name: windows-x64, os: windows-2022, target: x86_64-pc-windows-msvc,
               libzim: libzim_win-x86_64, ext: zip, sha256: 6e9bbfcd6c43d67c1d0ee98c9279362f3c3dac82d49fc0b60bdc9d9a17c6735a }
@@ -98,7 +98,7 @@ jobs:
 
   publish:
     needs: build
-    runs-on: macos-14
+    runs-on: macos-latest
     permissions:
       contents: write
     steps:
