@@ -45,8 +45,9 @@ The folder *is* the library: copy ZIM files in by hand and they just work.
 
 The server offers `search`, `read` and `list_archives`, plus library tools
 (`library_search`, `library_list`, `library_status`, and `library_add`,
-`library_update`, `library_remove`, which ask you to approve each change).
-Pass `--no-library` to hide the library tools; small models do better with fewer.
+`library_update`, `library_remove`, which ask you to approve each change) and
+`export`, which saves articles as Markdown once you approve.
+Pass `--no-library` to hide the library tools and `export`; small models do better with fewer.
 
 **Claude Code**
 
@@ -75,7 +76,7 @@ zim-mcp list --dir ~/zim
 
 ### Approving library changes
 
-Over MCP, adding, updating or removing an archive always asks *you* (through MCP
+Over MCP, adding, updating or removing an archive, or exporting articles, always asks *you* (through MCP
 elicitation) with the archive, its size and anything that will be deleted; the
 model can't approve for you. If the app can't ask, the tool refuses and returns
 the equivalent CLI command. If your app already prompts you before every tool
