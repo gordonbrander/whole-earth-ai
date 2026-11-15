@@ -1,0 +1,12 @@
+# Whole Earth drive manifest: everything on the drive besides this repo's
+# launchers and licenses. `just fetch` downloads and checks the files;
+# `just assemble <dest>` builds a drive from them.
+#
+# <sha256>  <file>  <url>
+d579f61dcd3a306f518e6d90e599d77793ed5f09543023d09c96ad35fcfa63f0  llamafile.exe  https://github.com/mozilla-ai/llamafile/releases/download/0.10.6/llamafile-0.10.6
+3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597  model.gguf  https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+# zim-mcp release archives: `just pin-release <tag>` writes these lines.
+#
+# ZIM archives by Kiwix catalog name. `zim-mcp library add` fetches the newest
+# version and checks it against the sha256 Kiwix publishes.
+zim  wikipedia_en_all_nopic

@@ -1,0 +1,133 @@
+# Builds the zim-mcp release archives when a version tag (v1.2.3) is pushed:
+# zim-mcp + the libzim shared libraries it needs + GPL text + source offer.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  LIBZIM_VERSION: "9.8.2"
+  LIBZIM_URL: https://download.openzim.org/release/libzim
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { name: macos-arm64, os: macos-14, target: aarch64-apple-darwin,
+              libzim: libzim_macos-arm64, ext: tar.gz, sha256: e8d7350506fe184a7c2d9e27899f107623caa1a6912c44c8a09a86747b58ce06 }
+          # Cross-compiled on Apple Silicon: GitHub is retiring Intel macOS runners.
+          - { name: macos-x64, os: macos-14, target: x86_64-apple-darwin, cross: true,
+              libzim: libzim_macos-x86_64, ext: tar.gz, sha256: 23b98ee69f97f67f4d9a977bd1cb9aed10cf46b2439bdf25c28bd73d24551193 }
+          - { name: windows-x64, os: windows-2022, target: x86_64-pc-windows-msvc,
+              libzim: libzim_win-x86_64, ext: zip, sha256: 6e9bbfcd6c43d67c1d0ee98c9279362f3c3dac82d49fc0b60bdc9d9a17c6735a }
+          - { name: linux-x64, os: ubuntu-22.04, target: x86_64-unknown-linux-gnu,
+              libzim: libzim_linux-x86_64-manylinux, ext: tar.gz, sha256: 8f1224c65a2fa377b8448213c3cc2db29fcb79632bd69f487f24459e0be3393c }
+          - { name: linux-arm64, os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu,
+              libzim: libzim_linux-aarch64-manylinux, ext: tar.gz, sha256: 872d7f3e9c66ffa96dd1a415c12c56a9a8213c0ce2acd24742ccfacf17b045c8 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add ${{ matrix.target }}
+
+      - name: Fetch libzim
+        run: |
+          f=${{ matrix.libzim }}-$LIBZIM_VERSION.${{ matrix.ext }}
+          curl -fsSL -o "$f" "$LIBZIM_URL/$f"
+          echo "${{ matrix.sha256 }}  $f" > sum.txt
+          if command -v sha256sum >/dev/null; then sha256sum -c sum.txt; else shasum -a 256 -c sum.txt; fi
+          mkdir libzim
+          if [ "${{ matrix.ext }}" = zip ]; then unzip -q "$f" -d libzim; else tar xzf "$f" -C libzim --strip-components=1; fi
+          echo "LIBZIM_DIR=$PWD/libzim" >> "$GITHUB_ENV"
+
+      - name: Let the macOS dylib be found next to the binary
+        if: runner.os == 'macOS'
+        run: |
+          install_name_tool -id @rpath/libzim.9.dylib libzim/lib/libzim.9.dylib
+          codesign -s - -f libzim/lib/libzim.9.dylib
+
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Test
+        if: ${{ !matrix.cross }}
+        run: |
+          # Tests link libzim too; point the loader at it.
+          export PATH="$LIBZIM_DIR/bin:$PATH" LD_LIBRARY_PATH="$LIBZIM_DIR/lib64" DYLD_LIBRARY_PATH="$LIBZIM_DIR/lib"
+          cargo test --release --locked --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          dir=zim-mcp-$version-${{ matrix.name }}
+          mkdir "$dir"
+          bin=target/${{ matrix.target }}/release/zim-mcp
+          case "${{ runner.os }}" in
+            macOS)   cp "$bin" libzim/lib/libzim.9.dylib "$dir/" ;;
+            Linux)   cp "$bin" "$dir/"; cp -L libzim/lib64/libzim.so.9 "$dir/" ;;
+            Windows) cp "$bin.exe" "$dir/"; cp libzim/bin/*.dll "$dir/" ;;
+          esac
+          cp LICENSE "$dir/LICENSE"
+          cat > "$dir/SOURCE.txt" <<TXT
+          zim-mcp $version is free software: GPL-3.0-or-later (see LICENSE).
+          It includes libzim $LIBZIM_VERSION (GPL-2.0-or-later) and libraries bundled with it.
+
+          Corresponding source:
+            zim-mcp: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/$GITHUB_SHA
+            libzim:  $LIBZIM_URL/libzim-$LIBZIM_VERSION.tar.xz
+                     https://github.com/openzim/libzim/tree/$LIBZIM_VERSION
+
+          For three years from the date you received this binary, the zim-mcp
+          maintainers will also provide this source on request, for no more than
+          the cost of physically performing distribution, via
+          $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues.
+          TXT
+
+          # Smoke test: runs from its own folder, with nothing installed.
+          if [ -z "${{ matrix.cross }}" ]; then (cd "$dir" && ./zim-mcp --version); fi
+
+          echo "PKG=$dir" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ env.PKG }}
+
+  publish:
+    needs: build
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+      - name: Merge macOS into a universal build, archive everything
+        run: |
+          set -e
+          version=${GITHUB_REF_NAME#v}
+          cd dist   # one folder per build job, named after it
+          for f in zim-mcp libzim.9.dylib; do
+            lipo -create "macos-arm64/$f" "macos-x64/$f" -output "macos-arm64/$f.u"
+            mv "macos-arm64/$f.u" "macos-arm64/$f"
+            codesign -s - -f "macos-arm64/$f"
+          done
+          mv macos-arm64 macos-universal && rm -rf macos-x64
+          mkdir ../out
+          for name in macos-universal linux-x64 linux-arm64 windows-x64; do
+            n="zim-mcp-$version-$name"
+            mv "$name" "$n"
+            if [ "$name" = windows-x64 ]; then
+              zip -qr "../out/$n.zip" "$n"
+            else
+              chmod +x "$n/zim-mcp"   # artifacts don't keep permissions
+              tar czf "../out/$n.tar.gz" "$n"
+            fi
+          done
+          cd ../out && shasum -a 256 -- * > SHA256SUMS && cat SHA256SUMS
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
