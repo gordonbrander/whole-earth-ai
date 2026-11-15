@@ -7,7 +7,7 @@ Wikivoyage, Stack Exchange…) for any AI tool. One binary, three jobs:
 - **manage** the library: browse the Kiwix catalog, download, verify, update, remove;
 - **export** articles as Markdown with attribution front matter.
 
-No local model needed: it works with whatever AI tool you already use.
+Works with any AI that supports MCP, (including local AIs such as Llamafile).
 
 ## Install
 
