@@ -38,7 +38,7 @@ jobs:
       - name: Lay out the drive
         run: |
           set -euo pipefail
-          sum() { if command -v sha256sum >/dev/null; then sha256sum -c; else shasum -a 256 -c; fi; }
+          sum() { if command -v shasum >/dev/null; then shasum -a 256 -c; else sha256sum -c; fi; }
           d=drive; mkdir -p "$d/bin" "$d/models" "$d/zim" dl
           tag="${{ inputs.tag }}"
           [ -n "$tag" ] || tag=$(grep -o 'releases/download/v[^/]*' bundle/manifest.sha256 | head -1 | cut -d/ -f3)
