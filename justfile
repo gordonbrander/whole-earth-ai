@@ -14,16 +14,22 @@ test:
     cargo test
 
 # Download llamafile, the model and the zim-mcp release archives in the manifest, and check them.
-# Files already in bundle/downloads are only checked (while the repo is private, get the
-# zim-mcp archives first with `gh release download <tag> --repo {{repo}} --dir bundle/downloads`).
+# Files already in bundle/downloads are only checked. zim-mcp releases come through `gh`.
 fetch:
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p {{dl}}
     grep -E '^[0-9a-f]{64} ' {{manifest}} | while read -r sha file url; do
       [ -f "{{dl}}/$file" ] && continue
-      curl -fL --retry 3 -C - -o "{{dl}}/$file.part" "$url"
-      mv "{{dl}}/$file.part" "{{dl}}/$file"
+      case "$url" in
+        # This repo's own releases: gh also works while the repo is private.
+        https://github.com/{{repo}}/releases/download/*)
+          tag=${url#https://github.com/{{repo}}/releases/download/}; tag=${tag%%/*}
+          gh release download "$tag" --repo {{repo}} --pattern "$file" --dir {{dl}} ;;
+        *)
+          curl -fL --retry 3 -C - -o "{{dl}}/$file.part" "$url"
+          mv "{{dl}}/$file.part" "{{dl}}/$file" ;;
+      esac
     done
     grep -E '^[0-9a-f]{64} ' {{manifest}} | awk '{print $1"  "$2}' | (cd {{dl}} && shasum -a 256 -c)
 

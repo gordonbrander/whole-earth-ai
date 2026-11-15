@@ -1,0 +1,81 @@
+# Drive smoke test: on each OS, lay out a small Whole Earth drive from the
+# pinned zim-mcp release and llamafile, run that OS's launcher, and check
+# that a wiki tool call works through llama-server. A tiny model stands in
+# for the drive's (tool calls here don't go through the model).
+name: drive-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: zim-mcp release to test
+        default: v0.1.0
+
+env:
+  MODEL_URL: https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/50968a4468ef4233ed78cd7c3de230dd1d61a56b/Qwen3-0.6B-Q4_K_M.gguf
+  MODEL_SHA256: ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, bin: windows-x64, ext: zip }
+          - { os: macos-15-intel, bin: macos-universal, ext: tar.gz }
+          - { os: macos-latest, bin: macos-universal, ext: tar.gz }
+          - { os: ubuntu-latest, bin: linux-x64, ext: tar.gz }
+          - { os: ubuntu-24.04-arm, bin: linux-arm64, ext: tar.gz }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lay out the drive
+        run: |
+          set -euo pipefail
+          sum() { if command -v sha256sum >/dev/null; then sha256sum -c; else shasum -a 256 -c; fi; }
+          d=drive; mkdir -p "$d/bin" "$d/models" "$d/zim" dl
+          # zim-mcp release, unmodified, checked against its SHA256SUMS
+          gh release download "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" --dir dl --pattern "*-${{ matrix.bin }}.${{ matrix.ext }}" --pattern SHA256SUMS
+          (cd dl && grep -- "-${{ matrix.bin }}" SHA256SUMS | sum)
+          a=$(find dl -name "zim-mcp-*-${{ matrix.bin }}.${{ matrix.ext }}"); stem=$(basename "$a" .${{ matrix.ext }})
+          if [ "${{ matrix.ext }}" = zip ]; then unzip -q "$a" -d dl; else tar xzf "$a" -C dl; fi
+          mv "dl/$stem" "$d/bin/${{ matrix.bin }}"
+          # llamafile as pinned in the manifest
+          read -r sha _ url < <(grep ' llamafile.exe ' bundle/manifest.sha256)
+          curl -fsSL -o "$d/llamafile.exe" "$url"; echo "$sha  $d/llamafile.exe" | sum
+          curl -fsSL -o "$d/models/model.gguf" "$MODEL_URL"; echo "$MODEL_SHA256  $d/models/model.gguf" | sum
+          cp bundle/launchers/* "$d/"; chmod +x "$d/llamafile.exe" "$d/Start (Mac).command" "$d/start-linux.sh" "$d/bin/${{ matrix.bin }}/zim-mcp"* || true
+          # a small archive, through zim-mcp's own downloader
+          "$d/bin/${{ matrix.bin }}/zim-mcp" library add wikipedia_en_ray-charles_mini --dir "$d/zim"
+          find "$d" -maxdepth 3
+
+      - name: Start the launcher (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Start-Process -FilePath cmd.exe -ArgumentList '/c', '"drive\Start (Windows).bat" > launcher.log 2>&1' -WindowStyle Hidden
+      - name: Start the launcher (macOS)
+        if: runner.os == 'macOS'
+        run: nohup "drive/Start (Mac).command" > launcher.log 2>&1 &
+      - name: Start the launcher (Linux)
+        if: runner.os == 'Linux'
+        run: nohup sh drive/start-linux.sh > launcher.log 2>&1 &
+
+      - name: Check a wiki tool call through llama-server
+        run: |
+          for _ in $(seq 1 180); do curl -sf http://127.0.0.1:8080/health >/dev/null && break; sleep 2; done
+          cat launcher.log | grep -iE "mcp|sandbox|error" || true
+          curl -sf http://127.0.0.1:8080/tools | tee tools.json | head -c 400; echo
+          grep -q wiki_search tools.json
+          curl -sf -X POST http://127.0.0.1:8080/tools -H 'Content-Type: application/json' \
+            -d '{"tool":"wiki_search","params":{"query":"Georgia on My Mind"}}' | tee result.json | head -c 400; echo
+          grep -q 'wikipedia_en_ray-charles_mini/Georgia_on_My_Mind' result.json
+          curl -sf -X POST http://127.0.0.1:8080/tools -H 'Content-Type: application/json' \
+            -d '{"tool":"wiki_read","params":{"id":"wikipedia_en_ray-charles_mini/Ray_Charles"}}' | grep -q 'page 1 of'
+          echo "drive works on ${{ matrix.os }}"
+      - if: always()
+        run: cat launcher.log 2>/dev/null | tail -40 || true
