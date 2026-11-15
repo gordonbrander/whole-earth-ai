@@ -14,6 +14,8 @@ test:
     cargo test
 
 # Download llamafile, the model and the zim-mcp release archives in the manifest, and check them.
+# Files already in bundle/downloads are only checked (while the repo is private, get the
+# zim-mcp archives first with `gh release download <tag> --repo {{repo}} --dir bundle/downloads`).
 fetch:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -63,7 +65,7 @@ pin-release tag:
     #!/usr/bin/env bash
     set -euo pipefail
     base="https://github.com/{{repo}}/releases/download/{{tag}}"
-    sums=$(curl -fsSL "$base/SHA256SUMS")
+    sums=$(gh release download {{tag}} --repo {{repo}} --pattern SHA256SUMS --output -)
     grep -v ' zim-mcp-' {{manifest}} > {{manifest}}.tmp
     echo "$sums" | awk -v b="$base" '{print $1"  "$2"  "b"/"$2}' > {{manifest}}.new
     # Keep the release lines right after their comment.
