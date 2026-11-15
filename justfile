@@ -3,7 +3,7 @@
 # `apt install libzim-dev`.
 # Whole Earth drive: `just fetch`, then `just assemble /Volumes/WHOLE-EARTH`.
 
-repo := env("ZIM_MCP_REPO", "gordonbrander/whole-earth-ai")
+repo := env("ZIM_MCP_REPO", "gordonbrander/zim-mcp")
 dl := "bundle/downloads"
 manifest := "bundle/manifest.sha256"
 
