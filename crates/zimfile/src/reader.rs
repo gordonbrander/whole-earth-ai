@@ -5,7 +5,7 @@ use crate::file::Parts;
 use crate::format::{
     Cluster, Compression, DELETED, Dirent, HEADER_SIZE, Header, Kind, LINKTARGET, REDIRECT,
 };
-use crate::{Error, Result};
+use crate::{Error, Illustration, Result};
 use md5::{Digest, Md5};
 use std::cmp::Ordering;
 use std::io::Read;
@@ -514,6 +514,47 @@ impl Archive {
             let (b, e) = (self.ns_begin(b'A').ok()?, self.ns_begin(b'B').ok()?);
             self.entry_at(b + rand(e - b)?).ok()
         }
+    }
+
+    /// The illustrations in `M/` (unparsable names skipped), plus the
+    /// favicon of old archives as `48x48@1` (libzim's `getIllustrationInfos`).
+    pub fn illustrations(&self) -> Vec<Illustration> {
+        const PREFIX: &str = "Illustration_";
+        let n = self.header.entry_count;
+        let start = self
+            .search(b'M', PREFIX.as_bytes(), n, false)
+            .map_or(n, |r| r.1);
+        // Entry paths, as libzim compares them: long paths in old archives
+        // (`M/…`), so those only ever offer the favicon.
+        let mut out: Vec<Illustration> = (start..n)
+            .map_while(|i| Some(self.entry_at(i).ok()?.path))
+            .take_while(|p| p.starts_with(PREFIX))
+            .filter_map(|p| Illustration::parse(&p))
+            .collect();
+        let favicon = Illustration::square(48);
+        if !out.contains(&favicon) && self.favicon().is_some() {
+            out.push(favicon);
+        }
+        out
+    }
+
+    /// `M/<illustration name>` (not following a redirect), or for a missing
+    /// `48x48@1` the favicon of old archives (libzim's `getIllustrationItem`).
+    pub fn illustration(&self, i: &Illustration) -> Option<Entry> {
+        self.entry_in('M', &i.name()).or_else(|| {
+            (*i == Illustration::square(48))
+                .then(|| self.resolve(&self.favicon()?).ok())
+                .flatten()
+        })
+    }
+
+    /// `-/favicon`, `-/favicon.png`, `I/favicon` or `I/favicon.png`.
+    fn favicon(&self) -> Option<Entry> {
+        ['-', 'I'].iter().find_map(|&ns| {
+            ["favicon", "favicon.png"]
+                .iter()
+                .find_map(|p| self.entry_in(ns, p))
+        })
     }
 
     /// The path the archive was opened from (`<base>aa` for a split archive;

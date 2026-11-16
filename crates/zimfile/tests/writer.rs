@@ -1,7 +1,7 @@
 //! Write archives with `Creator`, read them back with `Archive`.
 
 use std::path::{Path, PathBuf};
-use zimfile::{Archive, Compression, Creator, Item};
+use zimfile::{Archive, Compression, Creator, Illustration, Item};
 
 fn tmp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("zimfile-writer-{}", std::process::id()));
@@ -37,7 +37,7 @@ fn sample(name: &str, compression: Compression, cluster_size: usize) -> PathBuf 
     ] {
         c.add_metadata(k, v.as_bytes(), "text/plain").unwrap();
     }
-    c.add_illustration(48, PNG).unwrap();
+    c.add_illustration(&Illustration::square(48), PNG).unwrap();
     c.add_item(Item::new(
         "Home",
         "Home page",
@@ -573,4 +573,78 @@ fn range_based_suggestions() {
         ("article a", "dummyPatharticle a")
     );
     assert_eq!(s[1].title, "article b");
+}
+
+// libzim test/archive.cpp:164 openCreatedArchive
+#[test]
+fn open_created_archive() {
+    let (mut c, p) = creator("created.zim");
+    c = c.main_path("foo");
+    c.add_item(item("foo", "Foo", "FooContent")).unwrap();
+    // Title order differs from path order.
+    let mut foo2 = item("foo2", "AFoo", "Foo2Content");
+    foo2.front = Some(false);
+    c.add_item(foo2).unwrap();
+    c.add_metadata("Title", b"This is a title", "text/plain;charset=utf-8")
+        .unwrap();
+    c.add_illustration(&Illustration::square(48), b"PNGBinaryContent48")
+        .unwrap();
+    c.add_illustration(&Illustration::square(96), b"PNGBinaryContent96")
+        .unwrap();
+    c.add_redirection("foo3", "FooRedirection", "foo", false)
+        .unwrap();
+    c.add_redirection("foo4", "FooRedirection", "NoExistent", false)
+        .unwrap(); // dropped
+    c.finish().unwrap();
+
+    let a = Archive::open(&p).unwrap();
+    // listing + Counter + Title + mainPage + 2 illustrations + 2 items + redirect
+    assert_eq!(a.all_entry_count(), 9);
+    assert_eq!(a.entry_count(), 3);
+    assert_eq!(a.article_count(), 1);
+    assert_eq!(a.uuid(), safe_uuid());
+    assert_eq!(
+        a.metadata_keys(),
+        [
+            "Counter",
+            "Illustration_48x48@1",
+            "Illustration_96x96@1",
+            "Title"
+        ]
+    );
+    assert_eq!(
+        a.illustrations(),
+        [Illustration::square(48), Illustration::square(96)]
+    );
+    assert_eq!(a.metadata("Title").unwrap(), b"This is a title");
+    let title = a.metadata_entry("Title").unwrap();
+    assert_eq!(title.mimetype, "text/plain;charset=utf-8");
+    assert_eq!(a.entry_in('M', "Title").unwrap().index, title.index);
+    assert_eq!(a.metadata("Counter").unwrap(), b"text/html=2");
+    for size in [48, 96] {
+        let e = a.illustration(&Illustration::square(size)).unwrap();
+        assert_eq!(e.path, format!("Illustration_{size}x{size}@1"));
+        assert_eq!(
+            a.content(&e).unwrap(),
+            format!("PNGBinaryContent{size}").as_bytes()
+        );
+        assert_eq!(a.metadata_entry(&e.path).unwrap().mimetype, "image/png");
+    }
+    let foo = a.entry_by_path("foo").unwrap();
+    assert_eq!((foo.path.as_str(), foo.title.as_str()), ("foo", "Foo"));
+    assert_eq!(a.content(&foo).unwrap(), b"FooContent");
+    assert!(foo.redirect.is_none());
+    assert_eq!(a.entry_in('C', "foo").unwrap().index, foo.index);
+    assert_item(&a, "foo2", "AFoo", "text/html", "Foo2Content");
+    let foo3 = a.entry_by_path("foo3").unwrap();
+    assert_eq!(
+        (foo3.title.as_str(), foo3.redirect),
+        ("FooRedirection", Some(foo.index))
+    );
+    let main = a.main_entry().unwrap();
+    assert_eq!(main.redirect, Some(foo.index));
+    for missing in ["non/existent/path", "C/non/existent/path", "foo4"] {
+        assert_missing(&a, missing);
+    }
+    assert!(a.entry_in('C', "non/existent/path").is_none());
 }

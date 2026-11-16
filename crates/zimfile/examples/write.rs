@@ -1,7 +1,7 @@
 //! Write a tiny ZIM: `cargo run -p zimfile --example write -- hello.zim`.
 //! Open it with `zim-mcp read hello/hello --dir .`, kiwix-serve or zimcheck.
 
-use zimfile::{Creator, Item};
+use zimfile::{Creator, Illustration, Item};
 
 fn main() -> zimfile::Result<()> {
     let out = std::env::args().nth(1).unwrap_or("hello.zim".into());
@@ -17,7 +17,7 @@ fn main() -> zimfile::Result<()> {
     ] {
         c.add_metadata(name, value.as_bytes(), "text/plain")?;
     }
-    c.add_illustration(48, include_bytes!("dot.png"))?;
+    c.add_illustration(&Illustration::square(48), include_bytes!("dot.png"))?;
     let page = "<html><head><title>Hello</title></head><body><h1>Hello</h1>\
                 <p>Written by <a href=\"world\">zimfile</a>.</p></body></html>";
     c.add_item(Item::new("hello", "Hello", "text/html", page))?;

@@ -9,11 +9,13 @@
 
 mod file;
 pub mod format;
+mod illustration;
 mod reader;
 pub mod search;
 mod writer;
 
 pub use format::Compression;
+pub use illustration::Illustration;
 pub use reader::{Archive, Entry};
 pub use writer::{Creator, Item};
 

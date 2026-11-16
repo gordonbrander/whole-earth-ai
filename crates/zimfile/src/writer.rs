@@ -6,7 +6,7 @@
 //! dirents in path order · path pointers · cluster pointers · MD5.
 
 use crate::format::{Compression, DELETED, Dirent, HEADER_SIZE, Header, Kind};
-use crate::{Error, Result};
+use crate::{Error, Illustration, Result};
 use md5::{Digest, Md5};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
@@ -322,9 +322,9 @@ impl Creator {
         Ok(())
     }
 
-    /// Add a square PNG illustration (`M/Illustration_<size>x<size>@1`).
-    pub fn add_illustration(&mut self, size: u32, png: &[u8]) -> Result<()> {
-        self.add_metadata(&format!("Illustration_{size}x{size}@1"), png, "image/png")
+    /// Add a PNG illustration (`M/Illustration_<w>x<h>@<scale>…`).
+    pub fn add_illustration(&mut self, i: &Illustration, png: &[u8]) -> Result<()> {
+        self.add_metadata(&i.name(), png, "image/png")
     }
 
     /// Add `C/<path>` redirecting to `C/<target>` (which may be added later).

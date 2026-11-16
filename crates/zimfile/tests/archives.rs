@@ -494,3 +494,27 @@ fn partial_reads() {
         }
     }
 }
+
+// libzim test/archive.cpp:609 illustration
+#[test]
+fn illustration() {
+    use zimfile::Illustration;
+    for name in ["small.zim", "wikibooks_be_all_nopic_2017-02.zim"] {
+        for (p, cat) in data_files(name) {
+            let a = Archive::open(&p).unwrap();
+            let e = a.illustration(&Illustration::square(48)).unwrap();
+            let want = if cat == "withns" {
+                "I/favicon.png"
+            } else {
+                "Illustration_48x48@1"
+            };
+            assert_eq!(e.path, want, "{cat}/{name}");
+            assert_eq!(
+                a.illustrations(),
+                [Illustration::square(48)],
+                "{cat}/{name}"
+            );
+            assert!(a.illustration(&Illustration::square(96)).is_none());
+        }
+    }
+}
