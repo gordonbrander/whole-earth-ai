@@ -197,3 +197,51 @@ fn libzim_reads_zimfile_output() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// libzim's answers on zim-testing-suite (every entry as a digest, a sample
+/// readable), saved for zimfile's own tests once
+/// the shim is gone: `RECORD_LIBZIM=1 cargo test record_libzim`.
+#[test]
+fn record_libzim() {
+    if std::env::var_os("RECORD_LIBZIM").is_none() {
+        return;
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../zimfile/tests");
+    let out = root.join("golden/libzim");
+    std::fs::create_dir_all(&out).unwrap();
+    for p in archives() {
+        let Ok(rel) = p.strip_prefix(root.join("data")) else {
+            continue; // only the testing suite
+        };
+        let mut lib = Library::new();
+        lib.open("x".into(), &p).unwrap();
+        let l = lib.lib();
+        let all = ffi::all_entry_count(l, 0).unwrap();
+        let mut s = format!(
+            "all_entry_count\t{all}\nentry_count\t{}\narticle_count\t{}\nmain\t{}\n",
+            lib.entry_count(0),
+            lib.article_count(0),
+            ffi::main_path(l, 0).unwrap_or_else(|_| "-".into())
+        );
+        for m in METADATA {
+            s += &format!("meta\t{m}\t{}\n", lib.metadata(0, m).escape_default());
+        }
+        for q in PREFIXES {
+            let r = ffi::title_range(l, 0, q, 10).unwrap();
+            s += &format!("suggest\t{q}\t{}\n", r.join("|"));
+        }
+        // Every entry goes into one digest; a sample is kept readable.
+        let mut all_lines = String::new();
+        for i in 0..all {
+            let (path, title, mime, redirect, sha) = libzim_entry(&lib, i).unwrap();
+            let line = format!("{i}\t{path}\t{title}\t{mime}\t{redirect}\t{sha}\n");
+            if i % (all / 500).max(1) == 0 {
+                s += &format!("entry\t{line}");
+            }
+            all_lines += &line;
+        }
+        s += &format!("entries_sha256\t{}\n", sha(all_lines.as_bytes()));
+        let name = rel.to_string_lossy().replace('/', "__");
+        std::fs::write(out.join(format!("{name}.tsv")), s).unwrap();
+    }
+}

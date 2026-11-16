@@ -15,3 +15,6 @@ liblzma = { version = "0.4.9", features = ["static"] }
 md-5 = "0.11.0"
 tantivy = "0.27.0"
 zstd = "0.14.4"
+
+[dev-dependencies]
+sha2 = "0.11.1"

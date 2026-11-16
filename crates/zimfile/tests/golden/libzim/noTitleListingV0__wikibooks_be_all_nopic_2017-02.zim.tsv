@@ -1,0 +1,157 @@
+all_entry_count	123
+entry_count	109
+article_count	66
+main	mainPage
+meta	Title	Wikibooks
+meta	Language	bel
+meta	Date	2017-02-13
+meta	License	
+meta	Source	
+meta	Creator	Wikibooks
+meta	Scraper	
+meta	Counter	application/javascript=3;image/gif=2;image/png=32;text/css=1;text/html=66
+meta	Name	kiwix.wikibooks_be_all
+suggest	A	
+suggest	B	
+suggest	C	
+suggest	M	
+suggest	N	
+suggest	S	
+suggest	T	
+suggest	a	
+suggest	m	
+suggest	Л	Літоўская_кухня.html
+suggest	Б	
+suggest	Укр	Украінская_кухня.html|Украінская_мова.html|Украінская_мова_Урок_1.html|Украінская_мова_Урок_1_Адказы.html|Украінская_мова_Урок_2.html
+suggest	Пер	Першая_старонка.html
+suggest	1	
+suggest	The	
+suggest	Nol	
+suggest	Gen	
+suggest	Africa	
+suggest	main	
+suggest	favicon	
+entry	0	Main_Page.html	Main Page		Першая_старонка.html	bf8cc42ab96954b609206c67b35745c79ad7a05c00a07f7a21378530d786b9f9
+entry	1	favicon	favicon		favicon.png	c25b441faf9359699f6c1ad556961a07c328e334968f59fd8fa2b3bd45381c7d
+entry	2	favicon.png	favicon.png	image/png		c25b441faf9359699f6c1ad556961a07c328e334968f59fd8fa2b3bd45381c7d
+entry	3	index.htm	Першая старонка		Першая_старонка.html	bf8cc42ab96954b609206c67b35745c79ad7a05c00a07f7a21378530d786b9f9
+entry	4	j/body.js	j/body.js	application/javascript		b540c462e0a68abc32f4185a9d5b5d2232a8e355778357f9e6f5459c7acf89f5
+entry	5	j/head.js	j/head.js	application/javascript		cebd57af572460f50be82592e650bc5e3db560cfbc7538d65bb93bc2dfa5acbe
+entry	6	j/local.js	j/local.js	application/javascript		8fe55ab6453abe13303886537973754c50a56c913be2f7e96aaef1f25aa37e5a
+entry	7	m/115a35549794e50dcd03e60ef1a1ae24.png	m/115a35549794e50dcd03e60ef1a1ae24.png	image/png		35083a74287daaba439ee830d68616212f72395bed509b334c7d650f269d7896
+entry	8	m/5cffa5d7a0c145a80dee9dc2295d5cdf.png	m/5cffa5d7a0c145a80dee9dc2295d5cdf.png	image/png		182b16524de8b2da8faf6039037f68219859317afbadb1bbb26eb5084e8eba03
+entry	9	s/WBC-Asset-Pencil-Hover.png	s/WBC-Asset-Pencil-Hover.png	image/png		02debe9b678db935d5138a59ba2339ee69e8b353e9031d10e82991e9b85d8a2d
+entry	10	s/WBC-Asset-Pencil.png	s/WBC-Asset-Pencil.png	image/png		596859345736824850b4e9ad80b6b69c95e52a1da8c15ec61448f52bf5dae31b
+entry	11	s/ajax-loader.gif	s/ajax-loader.gif	image/gif		2f14b8c0a698c08686c4dd5a4fdcdf6b9ac7dbed09e652c1f64e574bd5808017
+entry	12	s/arrow-down-focus-icon.png	s/arrow-down-focus-icon.png	image/png		85e6b38552a09a416a9b6914d87afd694ac2da2f0e235a9190314969bbbbe76f
+entry	13	s/arrow-down-icon.png	s/arrow-down-icon.png	image/png		6c5efe214af1c099943ce520a4cbc030f1588e5c35c7b43d71dcbe71fdcf34bc
+entry	14	s/badge-digitaldocument.png	s/badge-digitaldocument.png	image/png		a6ff16bd545d40ffea18be2b01181bc036ee3eccd13b740324f235cf27da34d8
+entry	15	s/badge-golden-star.png	s/badge-golden-star.png	image/png		e1695562d09d55016f262251c2b992b14058a11ea684358c211d4f50623df47b
+entry	16	s/badge-problematic.png	s/badge-problematic.png	image/png		22d4fe7e8fbbc1285277191ae6f7941e4e171281d06e4f615af9f8c66ac75a6a
+entry	17	s/badge-proofread.png	s/badge-proofread.png	image/png		ce18e9a292eec9ac16e1ecae377d1bfa07eada2a9d7d58742ba14426bd850cf0
+entry	18	s/badge-silver-star.png	s/badge-silver-star.png	image/png		179857247b404a6c40f2b41404c142be72f03b549b69aa9aaabe82f2eb2e1ff1
+entry	19	s/badge-validated.png	s/badge-validated.png	image/png		32546f7354d6afe9da8e8bad449ec843dd3d331f7a44fc480231876bc9c49a87
+entry	20	s/bullet-icon.png	s/bullet-icon.png	image/png		ec44ac4d0557f1bc720622309c597825588c138a3060b6060e63c42ed37d4912
+entry	21	s/cog-sprite.png	s/cog-sprite.png	image/png		4dbe640af38d435616e5edcdd93b96541ed4316e5e7b667b01b7266c2e5b17fe
+entry	22	s/external-link-ltr-icon.png	s/external-link-ltr-icon.png	image/png		3b4b53f7f5a8f12ff1ddd8b6c62575233c13f611cf8d00d1812532efcc3f4867
+entry	23	s/magnify-clip-ltr.png	s/magnify-clip-ltr.png	image/png		9b097f4c7d1bfa7ef5f3034a63187ad3109d0f1aa38bf96651e9466e525fba9c
+entry	24	s/magnify-clip-rtl.png	s/magnify-clip-rtl.png	image/png		8af6568d573de38ea9c455a988f625135a5e41d10eb1e04e4efe8e94c6d4cc66
+entry	25	s/page-fade.png	s/page-fade.png	image/png		28650edb648dc8b27c5324d70053b5d163ee467cae0ef0f8ea3d4d75c9696bbb
+entry	26	s/portal-break.png	s/portal-break.png	image/png		92cfdc842c5a7d694e7caa258784b29203842c5d21df1af2a332fd4a62cc8440
+entry	27	s/search-fade.png	s/search-fade.png	image/png		fa86b811027fd5dc20c28c65551d994c8afa3b9430fd246c2f98a069736f272a
+entry	28	s/search-ltr.png	s/search-ltr.png	image/png		5492b50c6c24e32ac240cd5535f8144ee9b5c8d769a8e5e64f6518e8adfb389a
+entry	29	s/spinner.gif	s/spinner.gif	image/gif		6e25a668218dd1f8b302fa5ce8cde6ce0f0b69aaa9bab6e4e3ddac1cab5826a3
+entry	30	s/style.css	s/style.css	text/css		0d3be4f9c9f2a0ed1c61a374fa56ed7389d4bb0d8840cf22f9d7ab97c4c00a0d
+entry	31	s/tab-break.png	s/tab-break.png	image/png		3baeb8692a653764fd746861897a7b38f2a390ad162fd738a27066e4430e6645
+entry	32	s/tab-current-fade.png	s/tab-current-fade.png	image/png		b1f4105404bf3218c5aa5517fb05cc7ebb671d0cfb855d99a69168353a30abed
+entry	33	s/tab-normal-fade.png	s/tab-normal-fade.png	image/png		c2e6545a892a1a50e7ee8fc5978efddbbd0967c6aae9a4d435b5b96e43af4afa
+entry	34	s/unwatch-icon-hl.png	s/unwatch-icon-hl.png	image/png		40c36e3372572d8a61938d2ffbf9d1a61d53cf5b2188a7cce465d75bd390b472
+entry	35	s/unwatch-icon.png	s/unwatch-icon.png	image/png		67018be8b906e1a3e0bc61971f637fc3e76ea4d12e85ea5450afca697b56d4d0
+entry	36	s/user-icon.png	s/user-icon.png	image/png		10ed1f5879ec4d25f6a2a3a7eff8b0aa8c14b10012efd6240bfc687410c963bf
+entry	37	s/watch-icon-hl.png	s/watch-icon-hl.png	image/png		1e8cd38163ae15982a150a9035bf77958f779a738a0d568959bad8f5a23643d6
+entry	38	s/watch-icon-loading.png	s/watch-icon-loading.png	image/png		a528695363dd5b99c91f3d98d7c1fec4e22bc5a9c119c5ca3246f987558e719d
+entry	39	s/watch-icon.png	s/watch-icon.png	image/png		3b1239b783881116ef8fc1a250f08bfd4ca829ec2344f19dd0e5a84fc71e1563
+entry	40	s/wikibooks.png	s/wikibooks.png	image/png		bfb7c50410c41f60f56c4fc9db53d87a6b0ea11c66cae345d2fc4ff9f096dfc8
+entry	41	Індыйская_кухня.html	Індыйская кухня	text/html		ee24bb39cd3c08fa83c22802e1fb9f6767b64884a8e52bc896f81a706124b26b
+entry	42	Іспанская_кухня.html	Іспанская кухня	text/html		8a83a0b1da6c7b7c64a5f5c0cfddc51b91df7cd33346bc1b8f9340d6ca3c0828
+entry	43	Італьянская_кухня.html	Італьянская кухня	text/html		ff9cc5d40319a98be72b9504d7070202e800638bfa91d0d1455fc530af2503dc
+entry	44	Італьянская_мова.html	Італьянская мова	text/html		94bd2d5c9af00388fbfb84984bd23ceb0726785bb2bb026f5603cadd186e79af
+entry	45	Італьянская_мова_Урок_1.html	Італьянская мова/Урок 1	text/html		777599fb016558ffc7606658ea423619fbee3d5d234c21b454e25b9a4a691679
+entry	46	Італьянская_мова_Урок_10.html	Італьянская мова/Урок 10	text/html		e9c7f87ae6ecbf1978f71adc686e8b23b7e1edebcf992dbabd4c85b57a84d418
+entry	47	Італьянская_мова_Урок_2.html	Італьянская мова/Урок 2	text/html		c42c2dd828dc51c94b0ff703b6cc7ae80e7cb362dbb7c84a8d22998641191f33
+entry	48	Італьянская_мова_Урок_3.html	Італьянская мова/Урок 3	text/html		9f684e5dfbc96f6a4f5676b37dee9c70327df715c73ab021c0f31bf85b29f979
+entry	49	Італьянская_мова_Урок_4.html	Італьянская мова/Урок 4	text/html		2e04de54c1399e0778c6e05f7901511490439c5921b8b6868496f2834a27ab58
+entry	50	Італьянская_мова_Урок_5.html	Італьянская мова/Урок 5	text/html		b48bcb53d963777f2dec31f1672448c654540442c1e7929e88c2b257426a19d8
+entry	51	Італьянская_мова_Урок_6.html	Італьянская мова/Урок 6	text/html		3076c60a94e663bac91aac53adff6b4d70ec37cd360393d9a727b51fa981d6c6
+entry	52	Італьянская_мова_Урок_7.html	Італьянская мова/Урок 7	text/html		676672ac61571d4e9150d7e7901b6aaef957cbfa282551857992d71215e659b6
+entry	53	Італьянская_мова_Урок_8.html	Італьянская мова/Урок 8	text/html		0b8cf7fcd892c370a31c968380135af653d26e4bd9df2e3afe633e3571617255
+entry	54	Італьянская_мова_Урок_9.html	Італьянская мова/Урок 9	text/html		3703771daa3974bebc4880a6c63bbc3e1f10ae549b1fc4121df02f27925deddb
+entry	55	Азербайджанская_кухня.html	Азербайджанская кухня	text/html		d8c82923439cb51fe3a698bb2fa60b64656fad6ac22e171944b9f8ece1078509
+entry	56	Аргентынская_кухня.html	Аргентынская кухня	text/html		12f384e4c552cebc94d8f85cdf1f713a2617466abcd0f9da19c56698f3470cf9
+entry	57	Вандроўкі_па_Польшчы,_Расіі,_Швэцыі_і_Даніі.html	Вандроўкі па Польшчы, Расіі, Швэцыі і Даніі	text/html		8bef605fc975e312d2efbef3874c96bfada24735c239b93f68980945941b2164
+entry	58	Венгерская_кухня.html	Венгерская кухня	text/html		4176e314b087bcb5ef961519cb7c64277e54d2ba26c386b2893279a389822afd
+entry	59	Вугорская_кухня.html	Вугорская кухня		Венгерская_кухня.html	4176e314b087bcb5ef961519cb7c64277e54d2ba26c386b2893279a389822afd
+entry	60	Вікікнігі:Індэкс.html	Вікікнігі:Індэкс	text/html		3fc86e66cb8663681c6df6d0148737e44a012aac3f191f695c140c2f97e2985c
+entry	61	Галоўная_старонка.html	Галоўная старонка		Першая_старонка.html	bf8cc42ab96954b609206c67b35745c79ad7a05c00a07f7a21378530d786b9f9
+entry	62	Гаранская_кухня.html	Гаранская кухня	text/html		2b3f8ebfb83de9493663b48ffc879237e09e459ee864e65f2d74cf45422bdd4d
+entry	63	Грузінская_кухня.html	Грузінская кухня	text/html		da7d61fcf22568bbe4034adf2ceac844f5dcac47b1a202600a248cbe59508b83
+entry	64	Дапаможнік_па_C++.html	Дапаможнік па C++	text/html		ad9f86f4045873a653c3b3148548031983e73424613d1c5334fcdc936da2c969
+entry	65	Кава.html	Кава	text/html		2beef75a76fb12fcf42412e78f62983ae490712f379df008fed773af3f70f547
+entry	66	Кандратовіч.html	Кандратовіч	text/html		ffaffe3be3e215c84c51d5a506920ef07b341c11c9def7f3fcdd98b93474f108
+entry	67	Карэйская_кухня.html	Карэйская кухня	text/html		94742c945b6a866e613eec78ac237fdec3cb960a7861b141d6e98289dbbded3b
+entry	68	Кулінарная_кніга.html	Кулінарная кніга	text/html		63a51cd4f9c1411dc9abbf322cea165e085060f9a08b2b6398f34e64d396f765
+entry	69	Кітайская_кухня.html	Кітайская кухня	text/html		b6619ed628be50552ac85f7289508d5e8babccc2e3ab64db246e3f779ca5c0e7
+entry	70	Літоўская_кухня.html	Літоўская кухня	text/html		baddff9e64271303fa0d471ae173d506d1a60c895d58006b2cd86182f1497980
+entry	71	Малдаўская_кухня.html	Малдаўская кухня	text/html		8938a7cccc496fee9f0d6962c605a9366a86369932772d9b19464787bcc9d1a1
+entry	72	Новыя_кнігі.html	Новыя кнігі	text/html		46f6afe7bdf5fb74e916f5ab36bdc857f71bf4a7bbbb7187c64df58c8745a2d9
+entry	73	Нямецкая_кухня.html	Нямецкая кухня	text/html		162f8a4d6c3d55acfea3cd63b729b34f419095cc95f33cd5125acab2cf249f63
+entry	74	Першая_старонка.html	Першая старонка	text/html		bf8cc42ab96954b609206c67b35745c79ad7a05c00a07f7a21378530d786b9f9
+entry	75	Польская_кухня.html	Польская кухня	text/html		1c8f769e21d8e4d582b59fc8d8239957d4c3eea9a43eb3b9f6e4fe8e2d32e59a
+entry	76	Руская_кухня.html	Руская кухня	text/html		1c7fefa266fde8acab7ea383e44ec468e00a6ed7ec22655c34dca0c430eff4c1
+entry	77	Рэцэпт:Квас.html	Рэцэпт:Квас	text/html		0a55b0d71260d23c59f5039b4d5d9ca1c49ad9c36d2295cc116cdb8cae8fb93b
+entry	78	Рэцэпт:Ліманад.html	Рэцэпт:Ліманад	text/html		123378dd55c3819dec3b889fb78b6793e108959230a589700d4eaab9f13946db
+entry	79	Рэцэпт:Малочныя_напоі.html	Рэцэпт:Малочныя напоі	text/html		60a5ccf7ecdd560d8cb9f5b63befcc549210d0b0cdc9ff6a32cecd8a3d873f79
+entry	80	Рэцэпт:Салат_Нежность.html	Рэцэпт:Салат Нежность	text/html		c91e8d9bb19922a477b338d6a36c4579939e4af1f3b47c5d4b6076d3c0964af3
+entry	81	Рэцэпт:Суп_з_гарбуза.html	Рэцэпт:Суп з гарбуза	text/html		c04af55f9df48c326053811f88c1e6501148207d396f4bb8dd922cdb165e2d8e
+entry	82	Рэцэпт:Сіропы.html	Рэцэпт:Сіропы	text/html		5b3d5c0dda280633ee0c7440aea2189b89e249f490461587e7438c0483f799bd
+entry	83	Рэцэпт:Цыбульны_суп.html	Рэцэпт:Цыбульны суп	text/html		26fc3448c3eeb351383a1051bb3c8107e43338948fb6e1ada65eb0202d746d80
+entry	84	Рэцэпт:Чай.html	Рэцэпт:Чай	text/html		f07de1fd1f33a19d71a1fe809603b50e8bbb7473137ac7efaee01742b4da84f7
+entry	85	Славацкая_кухня.html	Славацкая кухня	text/html		6ed14eefcd32c1b3c647cd3d460d5d3d5d809ae0cdc5fc9beee292451ae08196
+entry	86	Слых.html	Слых	text/html		aea24f8e2b390a8e41f86af6f2d19809203dd17d69fb1f5e2244f58709f77c35
+entry	87	Украінская_кухня.html	Украінская кухня	text/html		34af21fafff0814284f2ac628e9cb7c898f30152a81c0d90d465202c66487d20
+entry	88	Украінская_мова.html	Украінская мова	text/html		ab042b418f3e5486ccfa2bc1947cace0165cbd97cacf7b2462196e7b9166d86c
+entry	89	Украінская_мова_Урок_1.html	Украінская мова/Урок 1	text/html		47e54049fd8e76a31afd87c0108d3fc11d18c8988a7d52f8e749f8af372ef28c
+entry	90	Украінская_мова_Урок_1_Адказы.html	Украінская мова/Урок 1/Адказы	text/html		c34ba0bd819c19e6d71a00c657c466b1ac8bd836a159681cf2384e593e87ed76
+entry	91	Украінская_мова_Урок_2.html	Украінская мова/Урок 2	text/html		a747f73f5e8ca4508b2ac3efb07eb4efde4181f336ca9a6efe398c578394ef5e
+entry	92	Французская_кухня.html	Французская кухня	text/html		08703b2073f93126c511c21196479ffbcb34d4a00cbda7588b01501092c79f92
+entry	93	Чарнавік.html	Чарнавік	text/html		14ebd78bbfbe86acee91366335fb72b24d7df9120d105e8af970cb76fdd0bedc
+entry	94	Чувашская_кухня.html	Чувашская кухня	text/html		d1b43181bfc29fd50c41c07981c7cdfe290284255835f0557c22dc8d45abf852
+entry	95	Швейцарская_кухня.html	Швейцарская кухня	text/html		657761fd86629ad759ff75341936834d7ffb0a392b53b98f855c3edfb69a13ab
+entry	96	Эспэранта.html	Эспэранта	text/html		c27facf3530e985abae57c006f674d392fdf4ac9f6451f837434a4f3ab5233e7
+entry	97	Эспэранта_Альфабэт.html	Эспэранта/Альфабэт	text/html		f72b87a790fb9b9fbe0a09359f7ffd689f1fa60ee16c66c899d575da423766b5
+entry	98	Эспэранта_Вінавальны_склон.html	Эспэранта/Вінавальны склон	text/html		7270251827be41d81c7c397a183d8a75d7220186868a25cbe41b76aa0ae80a3f
+entry	99	Эспэранта_Дзеяслоў.html	Эспэранта/Дзеяслоў	text/html		96365beeebb4d31a16647e035d5372a7028debcbf55bde9ab6db4cafd18ccb0c
+entry	100	Эспэранта_Займеньнік.html	Эспэранта/Займеньнік	text/html		ebd0993b79abc8f77add857ec3118c8de01918a87743bd2e96839b0d0324d2ce
+entry	101	Эспэранта_Лічэбнік.html	Эспэранта/Лічэбнік	text/html		571db4403461c618b3bd77a70f12202912c19ae1df2732a66ffab2618b6597e0
+entry	102	Эспэранта_Назоўнік.html	Эспэранта/Назоўнік	text/html		9f71507972077a071bc519684cfd2ad8f0436379b47cbad3579d7d75ab17ea2f
+entry	103	Эспэранта_Прыметнік.html	Эспэранта/Прыметнік	text/html		a1631f3d138d2540e1a08a53a8632ecf011d02e0d77af297ca6dca4baf081e8a
+entry	104	Эспэранта_Прыназоўнік.html	Эспэранта/Прыназоўнік	text/html		f00c686c6af44a165b453aa778316dc9645a2a4c56e07cf85f9e8142816cc868
+entry	105	Эспэранта_Прыслоўе.html	Эспэранта/Прыслоўе	text/html		4787b159f03bbd8ec882d1017c20b5e67404528e56be5161fb955e3a11b2e20a
+entry	106	Эспэранта_Прыстаўкі.html	Эспэранта/Прыстаўкі	text/html		689b8b7113ac1e436d67dde602b762b47729bcdd1b96673ec562a3d60270f73b
+entry	107	Эспэранта_Словаўтварэньне.html	Эспэранта/Словаўтварэньне	text/html		dc2e017f08a1d0d3ca47ca15fb4bf6e628b2735223bb656a6870d165daa6c34a
+entry	108	Эспэранта_Суфіксы.html	Эспэранта/Суфіксы	text/html		731f60c8e57c00617c5ddc3a73a148d192d3798bf949983b021dc1cc7d8fcb66
+entry	109	Counter	Counter	text/plain		d07d69a59764071a650e56e1aa0f5fb764c5aafce3601049bf0b681485b050f4
+entry	110	Creator	Creator	text/plain		41d9de0a0d524200107ddd4ac6d3c2c70455030a0126bc413339e2bb487d2f6f
+entry	111	Date	Date	text/plain		3b6185085924f7c47f92f84f885fbdc0ba841b59146e091e07bdb27f1fbe17b8
+entry	112	Description	Description	text/plain		6634d3ca9f475cfa039d408ab4db8cb9b9b90cb4dc2b3ba20f21b4e567f7c0c0
+entry	113	Illustration_48x48@1	Illustration_48x48@1	image/png		c25b441faf9359699f6c1ad556961a07c328e334968f59fd8fa2b3bd45381c7d
+entry	114	Language	Language	text/plain		a0e500e9974a153b823ba93b41cb1e69ab4ae6074c7cef52ca0025857b7128f9
+entry	115	Name	Name	text/plain		18db3f02a58f01995de3773ca0d30eab4eb99fdb8b949e9fd4d42cb8863044dc
+entry	116	Publisher	Publisher	text/plain		2909d566bfed37dbca4946c123a48ecb02a27f780e0d0c4f6698e5f5ac0d267c
+entry	117	Tags	Tags	text/plain		1e1bedbad9c95e468a0800aea947e8d69e9e4ba5c30ec8819e3383c5c4869bd7
+entry	118	Title	Title	text/plain		41d9de0a0d524200107ddd4ac6d3c2c70455030a0126bc413339e2bb487d2f6f
+entry	119	mainPage	mainPage		Першая_старонка.html	bf8cc42ab96954b609206c67b35745c79ad7a05c00a07f7a21378530d786b9f9
+entry	120	fulltext/xapian	fulltext/xapian	application/octet-stream+xapian		2f3f282a87c05b4259df075a5c913df3b71f635aaa0bd5a47c3b53abf4028406
+entry	121	listing/titleOrdered/v1	listing/titleOrdered/v1	application/octet-stream+zimlisting		1f4d4f0b41d53ca082a0a690cc0cfb277cc2c08076fd655527ea09a0f26158e6
+entry	122	title/xapian	title/xapian	application/octet-stream+xapian		2d307074f8a4a95ae8e764e4a29224651453e8ceed74156f3dd8dbd3ee1ab565
+entries_sha256	7c82b78edc5d78ca707d856aaf5e414dba523310a3eb2b59ac61affa2e2f203f
