@@ -51,45 +51,9 @@ pub fn newest(dir: &Path) -> std::io::Result<Vec<LocalArchive>> {
     Ok(all)
 }
 
-/// Delete an archive file and its search index (built or partial).
+/// Delete an archive file.
 pub fn delete_archive(path: &Path) -> std::io::Result<()> {
-    std::fs::remove_file(path)?;
-    zimfile::search::delete(path).map_err(std::io::Error::other)
-}
-
-/// Build the archive's full-text index (in the folder's hidden `.zimfile/`)
-/// unless it has one embedded or a valid one exists.
-pub fn index(path: &Path, show_progress: bool) -> Result<(), String> {
-    let err = |e: zimfile::Error| format!("{}: {e}", path.display());
-    let archive = zimfile::Archive::open(path).map_err(err)?;
-    if archive.has_fulltext_index() || zimfile::search::open(&archive, path).is_some() {
-        return Ok(());
-    }
-    let bar = show_progress.then(|| {
-        let b = indicatif::ProgressBar::new(0);
-        b.set_style(
-            indicatif::ProgressStyle::with_template(
-                "{msg} {wide_bar} {pos}/{len} articles eta {eta}",
-            )
-            .unwrap(),
-        );
-        b.set_message(format!(
-            "indexing {}",
-            path.file_name().unwrap_or_default().display()
-        ));
-        b
-    });
-    zimfile::search::build(&archive, path, |done, total| {
-        if let Some(b) = &bar {
-            b.set_length(total as u64);
-            b.set_position(done as u64);
-        }
-    })
-    .map_err(err)?;
-    if let Some(b) = bar {
-        b.finish();
-    }
-    Ok(())
+    std::fs::remove_file(path)
 }
 
 /// Delete every version of `name` (the `.zim` files and their indexes).
@@ -165,12 +129,7 @@ mod tests {
                 ("b".into(), "2026-01".into())
             ]
         );
-        let (new, old) = (dir.join("a_2026-02.zim"), dir.join("a_2025-01.zim"));
-        std::fs::create_dir_all(zimfile::search::index_dir(&new)).unwrap();
-        std::fs::create_dir_all(zimfile::search::partial_dir(&old)).unwrap();
         assert_eq!(remove(&dir, "a").unwrap().len(), 2);
-        assert!(!zimfile::search::index_dir(&new).exists());
-        assert!(!zimfile::search::partial_dir(&old).exists());
         assert!(remove(&dir, "a").is_err());
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(human_size(119 * 1024 * 1024 * 1024), "119.0 GiB");

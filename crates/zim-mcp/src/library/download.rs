@@ -122,7 +122,6 @@ pub fn add(dir: &Path, spec: &str, replace: bool, show_progress: bool) -> Result
     } else if show_progress {
         eprintln!("{} is already present", m.file);
     }
-    super::index(&dest, show_progress)?;
     if replace {
         let (name, _) = parse_filename(&m.file).unwrap();
         for old in super::scan(dir)
@@ -269,9 +268,6 @@ pub struct Progress {
     pub file: String,
     pub downloaded: u64,
     pub size: u64,
-    /// Building the full-text index (or interrupted while building), not downloading.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub indexing: bool,
     /// Last line of the background download's log, if it failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -312,20 +308,8 @@ pub fn status(dir: &Path) -> Result<Vec<Progress>, String> {
             file: file.to_string(),
             downloaded: part.metadata().map_or(0, |m| m.len()),
             size,
-            indexing: false,
             error,
         });
-    }
-    for a in super::scan(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
-        if zimfile::search::partial_dir(&a.path).exists() {
-            out.push(Progress {
-                file: a.path.file_name().unwrap().to_string_lossy().into_owned(),
-                downloaded: 0,
-                size: 0,
-                indexing: true,
-                error: None,
-            });
-        }
     }
     out.sort_by(|a, b| a.file.cmp(&b.file));
     Ok(out)
@@ -337,9 +321,6 @@ pub fn status_md(list: &[Progress]) -> String {
     }
     list.iter()
         .map(|p| {
-            if p.indexing {
-                return format!("- {}: indexing for full-text search", p.file);
-            }
             let pct = if p.size > 0 {
                 p.downloaded as f64 * 100.0 / p.size as f64
             } else {

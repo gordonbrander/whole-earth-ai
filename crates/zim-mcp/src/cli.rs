@@ -61,17 +61,6 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Build the full-text search index of the archives in DIR that lack one
-    /// (or only of NAME), in DIR's hidden `.zimfile/` folder, and remove the
-    /// indexes of archives that are gone. `library add` indexes already.
-    Index {
-        name: Option<String>,
-        #[arg(long, default_value = ".")]
-        dir: PathBuf,
-        /// Rebuild even if a valid index exists.
-        #[arg(long)]
-        force: bool,
-    },
     /// Manage the library: browse the Kiwix catalog, download, update, remove.
     Library {
         #[command(subcommand)]
@@ -180,11 +169,10 @@ pub fn local_md(dir: &Path) -> Result<String, String> {
         .iter()
         .map(|a| {
             let size = a.path.metadata().map_or(0, |m| m.len());
-            let embedded = zimfile::Archive::open(&a.path).is_ok_and(|z| z.has_fulltext_index());
-            let index = match zimfile::search::size(&a.path) {
-                _ if embedded => "indexed".into(),
-                Some(n) => format!("index {}", library::human_size(n)),
-                None => "not indexed".into(),
+            let index = if zimfile::Archive::open(&a.path).is_ok_and(|z| z.has_fulltext_index()) {
+                "full-text"
+            } else {
+                "titles only"
             };
             format!(
                 "- **{}** {} · {} · {index} · {}",
@@ -246,29 +234,6 @@ pub fn run() -> Result<(), String> {
                 "{} articles, {} redirects written; {} already existed; {} non-articles skipped",
                 s.written, s.redirects, s.skipped_existing, s.skipped_non_article
             );
-            Ok(())
-        }
-        Command::Index { name, dir, force } => {
-            let all = library::newest(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-            let chosen: Vec<_> = all
-                .into_iter()
-                .filter(|a| name.as_ref().is_none_or(|n| *n == a.name))
-                .collect();
-            if let Some(n) = &name
-                && chosen.is_empty()
-            {
-                return Err(format!("no archive named {n:?} in {}", dir.display()));
-            }
-            let err = |e: zimfile::Error| format!("{}: {e}", dir.display());
-            for a in chosen {
-                if force {
-                    zimfile::search::delete(&a.path).map_err(err)?;
-                }
-                library::index(&a.path, true)?;
-            }
-            for p in zimfile::search::prune(&dir).map_err(err)? {
-                println!("removed {}", p.display());
-            }
             Ok(())
         }
         Command::Library { command } => library_cmd(command),
