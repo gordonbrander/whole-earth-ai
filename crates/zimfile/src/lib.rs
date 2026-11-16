@@ -13,6 +13,7 @@
 
 mod file;
 pub mod format;
+pub(crate) mod glass;
 mod illustration;
 mod reader;
 pub mod search;
