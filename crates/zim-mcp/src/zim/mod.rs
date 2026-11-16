@@ -29,7 +29,7 @@ pub struct Hit {
 pub struct ArchiveInfo {
     pub name: String,
     archive: Archive,
-    /// Its sidecar full-text index, if built.
+    /// Its full-text index, if built.
     index: Option<search::Index>,
 }
 
@@ -70,7 +70,7 @@ impl Library {
     pub fn entry_count(&self, a: usize) -> u32 {
         self.a(a).entry_count()
     }
-    /// Whether the archive has a (valid) sidecar index.
+    /// Whether the archive has a (valid) full-text index.
     pub fn has_fulltext(&self, a: usize) -> bool {
         self.archives[a].index.is_some()
     }
@@ -107,7 +107,7 @@ impl Library {
         archive.content(&e)
     }
 
-    /// Full-text search of one archive's sidecar index (none: no hits).
+    /// Full-text search of one archive's index (none: no hits).
     pub fn fulltext_search(&self, a: usize, query: &str, limit: u32) -> Result<Vec<Hit>, Error> {
         let info = &self.archives[a];
         let Some(index) = &info.index else {

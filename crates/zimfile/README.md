@@ -3,7 +3,7 @@
 Read and write [ZIM](https://wiki.openzim.org/wiki/ZIM_file_format) archives
 (Kiwix, openZIM) in pure Rust: a port of libzim 9.8.2's reader and writer, plus
 full-text search through a [tantivy](https://github.com/quickwit-oss/tantivy)
-index kept beside the archive.
+index per archive.
 
 ```rust
 use zimfile::{Archive, Creator, Item, search};
@@ -26,5 +26,10 @@ c.finish()?;
 Answers match libzim's on openZIM's test archives (path, title, mimetype,
 redirects, content, metadata, counts, title suggestions), and libzim reads
 what `Creator` writes. Kiwix's embedded Xapian indexes are not read.
+
+Search indexes live in a hidden folder beside the archives, one per archive
+(`.zimfile/index/<file>.zim.idx/`), so every program using zimfile shares them.
+They can be deleted and rebuilt; `search::prune(dir)` removes the indexes of
+archives that are gone.
 
 License: GPL-3.0-or-later.

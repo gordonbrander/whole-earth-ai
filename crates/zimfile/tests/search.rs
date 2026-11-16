@@ -1,4 +1,4 @@
-//! The tantivy sidecar: build, query, staleness, interrupted builds.
+//! Search indexes: build, query, staleness, interrupted builds, layout.
 
 use std::path::{Path, PathBuf};
 use zimfile::{Archive, search};
@@ -12,7 +12,7 @@ fn data() -> PathBuf {
     d
 }
 
-/// A copy of `src` in a fresh temp dir, so the sidecar lands there.
+/// A copy of `src` in a fresh temp dir, so its index lands there.
 fn scratch(src: &Path, tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("zimfile-search-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -36,8 +36,16 @@ fn build_and_query() {
         let mut calls = 0;
         search::build(&a, &zim, |_, _| calls += 1).unwrap();
         assert!(calls > 0);
-        assert!(search::sidecar_path(&zim).is_dir());
-        assert!(!search::partial_path(&zim).exists());
+        assert!(search::index_dir(&zim).is_dir());
+        assert!(!search::partial_dir(&zim).exists());
+        // Only the hidden `.zimfile/` folder appears beside the archive.
+        let mut beside: Vec<_> = std::fs::read_dir(zim.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        beside.sort();
+        let file = zim.file_name().unwrap().to_str().unwrap();
+        assert_eq!(beside, [".zimfile", file]);
         let idx = search::open(&a, &zim).unwrap();
         for (q, want) in [
             ("greenhouse gas", "Greenhouse_gas"),
@@ -70,15 +78,15 @@ fn stale_and_interrupted() {
     let zim = scratch(&data().join("nons/small.zim"), "stale");
     let a = Archive::open(&zim).unwrap();
     // An interrupted build leaves only `.part`: not an index, and rebuilt over.
-    std::fs::create_dir_all(search::partial_path(&zim)).unwrap();
-    std::fs::write(search::partial_path(&zim).join("junk"), "x").unwrap();
+    std::fs::create_dir_all(search::partial_dir(&zim)).unwrap();
+    std::fs::write(search::partial_dir(&zim).join("junk"), "x").unwrap();
     assert!(search::open(&a, &zim).is_none());
     search::build(&a, &zim, |_, _| {}).unwrap();
-    assert!(!search::partial_path(&zim).exists());
+    assert!(!search::partial_dir(&zim).exists());
     let idx = search::open(&a, &zim).unwrap();
     assert!(!idx.search(&a, "test", 5).unwrap().is_empty() || a.article_count() <= 1);
     // An index of another archive (other uuid) is ignored.
-    let stamp = search::sidecar_path(&zim).join("zimfile.json");
+    let stamp = search::index_dir(&zim).join("zimfile.json");
     let other = std::fs::read_to_string(&stamp).unwrap().replace('"', "'");
     std::fs::write(&stamp, other).unwrap();
     assert!(search::open(&a, &zim).is_none());
@@ -94,21 +102,50 @@ fn read_only_index() {
     let a = Archive::open(&zim).unwrap();
     search::build(&a, &zim, |_, _| {}).unwrap();
     let set = |mode| {
-        let idx = search::sidecar_path(&zim);
+        let idx = search::index_dir(&zim);
         for e in std::fs::read_dir(&idx).unwrap() {
             let p = e.unwrap().path();
             std::fs::set_permissions(&p, std::fs::Permissions::from_mode(mode & 0o666)).unwrap();
         }
-        for d in [idx.as_path(), zim.parent().unwrap()] {
+        let root = idx.parent().unwrap(); // .zimfile/index
+        for d in [&idx, root, root.parent().unwrap(), zim.parent().unwrap()] {
             std::fs::set_permissions(d, std::fs::Permissions::from_mode(mode)).unwrap();
         }
     };
     for lock in [".tantivy-meta.lock", ".tantivy-writer.lock"] {
-        let _ = std::fs::remove_file(search::sidecar_path(&zim).join(lock));
+        let _ = std::fs::remove_file(search::index_dir(&zim).join(lock));
     }
     set(0o555);
     let opened = search::open(&a, &zim).map(|i| i.search(&a, "test", 5).is_ok());
     set(0o755);
     assert_eq!(opened, Some(true));
     std::fs::remove_dir_all(zim.parent().unwrap()).unwrap();
+}
+
+/// `delete` removes one archive's index; `prune` those whose archive is gone.
+#[test]
+fn delete_and_prune() {
+    let zim = scratch(&data().join("nons/small.zim"), "prune");
+    let dir = zim.parent().unwrap().to_path_buf();
+    let other = dir.join("other.zim");
+    std::fs::copy(&zim, &other).unwrap();
+    for z in [&zim, &other] {
+        search::build(&Archive::open(z).unwrap(), z, |_, _| {}).unwrap();
+    }
+    std::fs::create_dir_all(search::partial_dir(&other)).unwrap();
+    assert_eq!(search::prune(&dir).unwrap(), Vec::<PathBuf>::new());
+    assert!(search::size(&zim).unwrap() > 0);
+    // `other.zim` deleted by hand: its index and leftover .part go.
+    std::fs::remove_file(&other).unwrap();
+    assert_eq!(
+        search::prune(&dir).unwrap(),
+        [search::index_dir(&other), search::partial_dir(&other)]
+    );
+    assert!(search::index_dir(&zim).is_dir());
+    search::delete(&zim).unwrap();
+    assert!(search::size(&zim).is_none());
+    search::delete(&zim).unwrap(); // nothing to delete is fine
+    // No index folder at all.
+    assert!(search::prune(&dir.join("nowhere")).unwrap().is_empty());
+    std::fs::remove_dir_all(&dir).unwrap();
 }

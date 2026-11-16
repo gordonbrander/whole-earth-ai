@@ -51,22 +51,14 @@ pub fn newest(dir: &Path) -> std::io::Result<Vec<LocalArchive>> {
     Ok(all)
 }
 
-/// Delete an archive file and its sidecar index (built or partial).
+/// Delete an archive file and its search index (built or partial).
 pub fn delete_archive(path: &Path) -> std::io::Result<()> {
     std::fs::remove_file(path)?;
-    for dir in [
-        zimfile::search::sidecar_path(path),
-        zimfile::search::partial_path(path),
-    ] {
-        if dir.exists() {
-            std::fs::remove_dir_all(dir)?;
-        }
-    }
-    Ok(())
+    zimfile::search::delete(path).map_err(std::io::Error::other)
 }
 
-/// Build the archive's full-text sidecar index (`<file>.idx/`) unless a valid
-/// one exists.
+/// Build the archive's full-text index (in the folder's hidden `.zimfile/`)
+/// unless a valid one exists.
 pub fn index(path: &Path, show_progress: bool) -> Result<(), String> {
     let err = |e: zimfile::Error| format!("{}: {e}", path.display());
     let archive = zimfile::Archive::open(path).map_err(err)?;
@@ -173,11 +165,12 @@ mod tests {
                 ("b".into(), "2026-01".into())
             ]
         );
-        std::fs::create_dir_all(dir.join("a_2026-02.zim.idx")).unwrap();
-        std::fs::create_dir_all(dir.join("a_2025-01.zim.idx.part")).unwrap();
+        let (new, old) = (dir.join("a_2026-02.zim"), dir.join("a_2025-01.zim"));
+        std::fs::create_dir_all(zimfile::search::index_dir(&new)).unwrap();
+        std::fs::create_dir_all(zimfile::search::partial_dir(&old)).unwrap();
         assert_eq!(remove(&dir, "a").unwrap().len(), 2);
-        assert!(!dir.join("a_2026-02.zim.idx").exists());
-        assert!(!dir.join("a_2025-01.zim.idx.part").exists());
+        assert!(!zimfile::search::index_dir(&new).exists());
+        assert!(!zimfile::search::partial_dir(&old).exists());
         assert!(remove(&dir, "a").is_err());
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(human_size(119 * 1024 * 1024 * 1024), "119.0 GiB");

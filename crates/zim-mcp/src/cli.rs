@@ -61,8 +61,9 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Build the full-text search index (`<file>.zim.idx/`) of the archives in
-    /// DIR that lack one, or only of NAME. `library add` does this already.
+    /// Build the full-text search index of the archives in DIR that lack one
+    /// (or only of NAME), in DIR's hidden `.zimfile/` folder, and remove the
+    /// indexes of archives that are gone. `library add` indexes already.
     Index {
         name: Option<String>,
         #[arg(long, default_value = ".")]
@@ -179,8 +180,12 @@ pub fn local_md(dir: &Path) -> Result<String, String> {
         .iter()
         .map(|a| {
             let size = a.path.metadata().map_or(0, |m| m.len());
+            let index = match zimfile::search::size(&a.path) {
+                Some(n) => format!("index {}", library::human_size(n)),
+                None => "not indexed".into(),
+            };
             format!(
-                "- **{}** {} · {} · {}",
+                "- **{}** {} · {} · {index} · {}",
                 a.name,
                 a.date,
                 library::human_size(size),
@@ -252,12 +257,15 @@ pub fn run() -> Result<(), String> {
             {
                 return Err(format!("no archive named {n:?} in {}", dir.display()));
             }
+            let err = |e: zimfile::Error| format!("{}: {e}", dir.display());
             for a in chosen {
-                let idx = zimfile::search::sidecar_path(&a.path);
-                if force && idx.exists() {
-                    std::fs::remove_dir_all(&idx).map_err(|e| format!("{}: {e}", idx.display()))?;
+                if force {
+                    zimfile::search::delete(&a.path).map_err(err)?;
                 }
                 library::index(&a.path, true)?;
+            }
+            for p in zimfile::search::prune(&dir).map_err(err)? {
+                println!("removed {}", p.display());
             }
             Ok(())
         }

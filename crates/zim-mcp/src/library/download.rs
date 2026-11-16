@@ -269,7 +269,7 @@ pub struct Progress {
     pub file: String,
     pub downloaded: u64,
     pub size: u64,
-    /// Building the full-text index (`<file>.idx.part/`), not downloading.
+    /// Building the full-text index (or interrupted while building), not downloading.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub indexing: bool,
     /// Last line of the background download's log, if it failed.
@@ -292,16 +292,6 @@ pub fn status(dir: &Path) -> Result<Vec<Progress>, String> {
         else {
             continue;
         };
-        if let Some(zim) = file.strip_suffix(".idx") {
-            out.push(Progress {
-                file: zim.to_string(),
-                downloaded: 0,
-                size: 0,
-                indexing: true,
-                error: None,
-            });
-            continue;
-        }
         if out.iter().any(|p: &Progress| p.file == file) {
             continue;
         }
@@ -325,6 +315,17 @@ pub fn status(dir: &Path) -> Result<Vec<Progress>, String> {
             indexing: false,
             error,
         });
+    }
+    for a in super::scan(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
+        if zimfile::search::partial_dir(&a.path).exists() {
+            out.push(Progress {
+                file: a.path.file_name().unwrap().to_string_lossy().into_owned(),
+                downloaded: 0,
+                size: 0,
+                indexing: true,
+                error: None,
+            });
+        }
     }
     out.sort_by(|a, b| a.file.cmp(&b.file));
     Ok(out)

@@ -4,8 +4,8 @@
 //! - [`Archive`] opens a `.zim` (or a split `.zimaa`, `.zimab`, …) and looks
 //!   entries up by path, index or title prefix, with libzim's rules.
 //! - [`Creator`] writes archives that libzim reads.
-//! - [`search`] builds and queries a tantivy full-text index kept beside the
-//!   archive (`<file>.zim.idx/`).
+//! - [`search`] builds and queries a tantivy full-text index per archive, kept
+//!   in a hidden `.zimfile/` folder beside the archives.
 
 mod file;
 pub mod format;

@@ -1,9 +1,19 @@
-//! Full-text search through a tantivy *sidecar* index, `<file>.zim.idx/`,
-//! built from an archive's articles. Kiwix's embedded Xapian indexes are ignored.
+//! Full-text search through a tantivy index built from an archive's articles.
+//! Kiwix's embedded Xapian indexes are ignored.
 //!
-//! A build writes `<file>.zim.idx.part/` and renames it when complete, so an
-//! interrupted build is never mistaken for an index. `zimfile.json` inside
-//! records the archive's uuid: an index for another archive is ignored.
+//! Indexes live in a hidden folder beside the archives, one per archive:
+//!
+//! ```text
+//! zim/
+//!   wikipedia_en_all_nopic_2026-02.zim
+//!   .zimfile/index/wikipedia_en_all_nopic_2026-02.zim.idx/        built
+//!   .zimfile/index/wikipedia_en_all_nopic_2026-02.zim.idx.part/   building
+//! ```
+//!
+//! A build writes `….idx.part/` and renames it when complete, so an interrupted
+//! build is never mistaken for an index. `zimfile.json` inside records the
+//! archive's uuid: an index for another archive is ignored. Everything under
+//! `.zimfile/` can be deleted and rebuilt.
 
 use crate::{Archive, Error, Result};
 use std::collections::{HashMap, HashSet};
@@ -46,18 +56,74 @@ fn err(e: impl std::fmt::Display) -> Error {
     Error::Search(e.to_string())
 }
 
-/// `<zim>.idx`
-pub fn sidecar_path(zim: &Path) -> PathBuf {
-    let mut s = zim.as_os_str().to_owned();
-    s.push(".idx");
+/// The folder of indexes for the archives in `dir`: `<dir>/.zimfile/index`.
+fn index_root(dir: &Path) -> PathBuf {
+    dir.join(".zimfile").join("index")
+}
+
+/// `<folder>/.zimfile/index/<file>.idx`: the index of the archive `zim`.
+pub fn index_dir(zim: &Path) -> PathBuf {
+    let mut name = zim.file_name().unwrap_or_default().to_owned();
+    name.push(".idx");
+    index_root(zim.parent().unwrap_or(Path::new(""))).join(name)
+}
+
+/// [`index_dir`] + `.part`: a build in progress (or interrupted).
+pub fn partial_dir(zim: &Path) -> PathBuf {
+    let mut s = index_dir(zim).into_os_string();
+    s.push(".part");
     PathBuf::from(s)
 }
 
-/// `<zim>.idx.part`: a build in progress (or interrupted).
-pub fn partial_path(zim: &Path) -> PathBuf {
-    let mut s = zim.as_os_str().to_owned();
-    s.push(".idx.part");
-    PathBuf::from(s)
+/// Delete the index of `zim`, built or partial.
+pub fn delete(zim: &Path) -> Result<()> {
+    for d in [index_dir(zim), partial_dir(zim)] {
+        if d.exists() {
+            std::fs::remove_dir_all(d)?;
+        }
+    }
+    Ok(())
+}
+
+/// Delete the indexes in `dir` whose archive is gone. Returns what was removed.
+pub fn prune(dir: &Path) -> Result<Vec<PathBuf>> {
+    let root = index_root(dir);
+    let Ok(entries) = std::fs::read_dir(&root) else {
+        return Ok(vec![]); // no indexes
+    };
+    let mut removed = vec![];
+    for e in entries {
+        let path = e?.path();
+        let name = path.file_name().unwrap_or_default().to_string_lossy();
+        let zim = name.strip_suffix(".part").unwrap_or(&name);
+        let Some(zim) = zim.strip_suffix(".idx") else {
+            continue;
+        };
+        if !dir.join(zim).exists() {
+            std::fs::remove_dir_all(&path)?;
+            removed.push(path);
+        }
+    }
+    removed.sort();
+    Ok(removed)
+}
+
+/// Bytes on disk of the built index of `zim`, if there is one.
+pub fn size(zim: &Path) -> Option<u64> {
+    fn walk(p: &Path) -> u64 {
+        std::fs::read_dir(p)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| match e.metadata() {
+                Ok(m) if m.is_dir() => walk(&e.path()),
+                Ok(m) => m.len(),
+                Err(_) => 0,
+            })
+            .sum()
+    }
+    let d = index_dir(zim);
+    d.is_dir().then(|| walk(&d))
 }
 
 fn stamp(archive: &Archive) -> String {
@@ -152,10 +218,10 @@ fn articles(archive: &Archive) -> Result<(Vec<crate::Entry>, HashMap<u32, String
     Ok((docs, redirects))
 }
 
-/// Build (or rebuild) the sidecar index for `zim`. `progress(done, total)`
+/// Build (or rebuild) the index of `zim` ([`index_dir`]). `progress(done, total)`
 /// is called as articles are indexed.
 pub fn build(archive: &Archive, zim: &Path, mut progress: impl FnMut(u32, u32)) -> Result<()> {
-    let part = partial_path(zim);
+    let part = partial_dir(zim);
     if part.exists() {
         std::fs::remove_dir_all(&part)?;
     }
@@ -188,7 +254,7 @@ pub fn build(archive: &Archive, zim: &Path, mut progress: impl FnMut(u32, u32)) 
     writer.wait_merging_threads().map_err(err)?;
     progress(total, total);
     std::fs::write(part.join("zimfile.json"), stamp(archive))?;
-    let dest = sidecar_path(zim);
+    let dest = index_dir(zim);
     if dest.exists() {
         std::fs::remove_dir_all(&dest)?;
     }
@@ -196,9 +262,9 @@ pub fn build(archive: &Archive, zim: &Path, mut progress: impl FnMut(u32, u32)) 
     Ok(())
 }
 
-/// The sidecar index of `zim`, if it exists and was built from this archive.
+/// The index of `zim`, if it exists and was built from this archive.
 pub fn open(archive: &Archive, zim: &Path) -> Option<Index> {
-    let dir = sidecar_path(zim);
+    let dir = index_dir(zim);
     if std::fs::read_to_string(dir.join("zimfile.json")).ok()? != stamp(archive) {
         return None;
     }
@@ -221,7 +287,7 @@ pub fn open(archive: &Archive, zim: &Path) -> Option<Index> {
     })
 }
 
-/// A built index's directory, opened without lock files: a sidecar never
+/// A built index's directory, opened without lock files: an index never
 /// changes once renamed into place, and it may sit on a read-only drive.
 #[derive(Clone, Debug)]
 struct ReadOnly(tantivy::directory::MmapDirectory);
