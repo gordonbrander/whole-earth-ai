@@ -125,3 +125,34 @@ fn split_archive() {
 fn missing_file() {
     assert!(Archive::open(&data().join("nope.zim")).is_err());
 }
+
+/// libzim `test/find.cpp`: `findByTitle` is a case-sensitive byte-prefix range.
+#[test]
+fn suggestions_by_title_prefix() {
+    for cat in ["withns", "nons", "noTitleListingV0"] {
+        let a =
+            Archive::open(&data().join(cat).join("wikibooks_be_all_nopic_2017-02.zim")).unwrap();
+        assert!(a.suggest("unkownTitle", 10).is_empty());
+        assert!(a.suggest("j/body.js", 10).is_empty());
+        assert!(a.suggest("", 10).is_empty());
+        let first = a.suggest("Першая старонка", 10);
+        // Old scheme: the page and its index.html redirect; new: `W/mainPage` isn't in `C`.
+        assert_eq!(first.len(), if cat == "withns" { 2 } else { 1 }, "{cat}");
+        let u = a.suggest("Украінская", 10);
+        assert_eq!(u.len(), 5, "{cat}");
+        assert!(u.iter().all(|e| e.title.starts_with("Украінская")));
+        assert_eq!(a.suggest("Украінская", 2), u[..2]);
+        assert!(a.suggest("украінская", 10).is_empty(), "case-sensitive");
+    }
+}
+
+#[test]
+fn not_found_by_path() {
+    for cat in ["withns", "nons", "noTitleListingV0"] {
+        let a =
+            Archive::open(&data().join(cat).join("wikibooks_be_all_nopic_2017-02.zim")).unwrap();
+        for p in ["unkwonPath", "U/unkwonPath", "A/unkwonPath", "X", "X/"] {
+            assert!(a.entry_by_path(p).is_none(), "{cat} {p}");
+        }
+    }
+}
