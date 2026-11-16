@@ -234,7 +234,7 @@ fn zimcheck(p: &Path) {
     );
 }
 
-/// libzim `test/find.cpp` ByTitleWithDuplicate.
+// libzim test/find.cpp:157 ByTitleWithDuplicate
 #[test]
 fn find_by_title_with_duplicates() {
     let path = tmp("dups.zim");
@@ -285,7 +285,7 @@ fn empty_archive_and_unfinished() {
     assert!(!path.exists() && !tmp("unfinished.zim.tmp").exists());
 }
 
-// libzim test/creator.cpp:49-70 ASSERT_ITEM_ENTRY, ASSERT_REDIRECT_ENTRY, EXPECT_MISSING_ENTRY.
+// Mirror libzim test/creator.cpp:49 ASSERT_REDIRECT_ENTRY, :58 ASSERT_ITEM_ENTRY, :69 EXPECT_MISSING_ENTRY.
 fn assert_item(a: &Archive, path: &str, title: &str, mime: &str, content: &str) {
     let e = a
         .entry_by_path(path)

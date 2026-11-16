@@ -1,9 +1,13 @@
 //! Read and write ZIM archives (the format behind Kiwix and openZIM), in pure
-//! Rust. A port of libzim 9.8.2's reader and writer.
+//! Rust. A port of libzim 9.8.2's reader and writer (everything but Xapian).
 //!
-//! - [`Archive`] opens a `.zim` (or a split `.zimaa`, `.zimab`, …) and looks
-//!   entries up by path, index or title prefix, with libzim's rules.
-//! - [`Creator`] writes archives that libzim reads.
+//! - [`Archive`] opens a `.zim` (or a split `.zimaa`, `.zimab`, …, or byte
+//!   ranges of other files) and looks entries up by path, index or title,
+//!   over path, title and cluster-order ranges, with libzim's rules; reads
+//!   content whole or in slices; lists illustrations; runs libzim's
+//!   integrity [`Check`]s.
+//! - [`Creator`] writes archives that libzim reads, streaming
+//!   [`Content::File`] items from disk.
 //! - [`search`] builds and queries a tantivy full-text index per archive, kept
 //!   in a hidden `.zimfile/` folder beside the archives.
 

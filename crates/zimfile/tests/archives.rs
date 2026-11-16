@@ -132,7 +132,7 @@ fn wikibooks(cat: &str) -> Archive {
 
 const CATEGORIES: [&str; 3] = ["withns", "nons", "noTitleListingV0"];
 
-// libzim test/find.cpp:36 NotFoundByTitle, :48 NotFoundByPath
+// libzim test/find.cpp:39 NotFoundByTitle, :52 NotFoundByPath
 #[test]
 fn not_found() {
     for cat in CATEGORIES {
@@ -226,7 +226,7 @@ fn cluster_order() {
     }
 }
 
-// libzim test/iterator.cpp:100 beginByTitle, :124 beginByPath
+// libzim test/iterator.cpp:100 beginByTitle, :127 beginByPath
 #[test]
 fn begin_by_title_and_path() {
     for cat in CATEGORIES {

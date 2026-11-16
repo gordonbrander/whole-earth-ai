@@ -1,5 +1,9 @@
-//! `Archive`: open a ZIM file and look entries up, the way libzim does
-//! (`fileimpl.cpp`, `archive.cpp`, `dirent_lookup.h`).
+//! `Archive`: open a ZIM file, look entries up and read them, the way libzim
+//! does (`fileimpl.cpp`, `archive.cpp`, `dirent_lookup.h`, `cluster.cpp`).
+//!
+//! Entry indexes are absolute, in path order. Title-ordered positions
+//! ([`Archive::by_title`], [`Archive::find_by_title`]) are a separate space:
+//! map them with [`Archive::entry_at_title`].
 
 use crate::file::Parts;
 use crate::format::{
@@ -980,7 +984,7 @@ fn count_mime(counter: &str, f: impl Fn(&str) -> bool) -> u32 {
 mod tests {
     use super::*;
 
-    // libzim test/parseLongPath.cpp:31 invalid, :44 valid
+    // libzim test/parseLongPath.cpp:32 invalid, :45 valid
     #[test]
     fn long_paths() {
         for p in [
@@ -1012,7 +1016,7 @@ mod tests {
 
     const BIG: &str = "application/javascript=8;text/html=3;application/warc-headers=28364;text/html;raw=true=6336;text/css=47;text/javascript=98;image/png=968;image/webp=24;application/json=3694;image/gif=10274;image/jpeg=1582;font/woff2=25;text/plain=284;application/atom+xml=247;application/x-www-form-urlencoded=9;video/mp4=9;application/x-javascript=7;application/xml=1;image/svg+xml=5";
 
-    // libzim test/counterParsing.cpp:32 simpleMimeType, :51 paramMimeType, :101 wrongType
+    // libzim test/counterParsing.cpp:32 simpleMimeType, :51 paramMimeType, :100 wrongType
     #[test]
     fn counter() {
         let cases: &[(&str, &[(&str, u32)])] = &[
@@ -1072,7 +1076,7 @@ mod tests {
         }
     }
 
-    // libzim test/counterParsing.cpp:152 countMimeType
+    // libzim test/counterParsing.cpp:142 countMimeType
     #[test]
     fn counter_counts() {
         let s = "text/html;raw=true=1";

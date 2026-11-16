@@ -101,7 +101,7 @@ mod tests {
         }
     }
 
-    // libzim test/illustrations.cpp:46 parsingOfInvalidInput
+    // libzim test/illustrations.cpp:44 parsingOfInvalidInput
     #[test]
     fn parsing_of_invalid_input() {
         for s in [
@@ -126,7 +126,7 @@ mod tests {
         }
     }
 
-    // libzim test/illustrations.cpp:69 asMetadataItemName
+    // libzim test/illustrations.cpp:68 asMetadataItemName
     #[test]
     fn as_metadata_item_name() {
         assert_eq!(ii(64, 64, 1.0, &[]).name(), "Illustration_64x64@1");
