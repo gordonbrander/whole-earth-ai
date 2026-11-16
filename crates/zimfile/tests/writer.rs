@@ -9,6 +9,9 @@ fn tmp(name: &str) -> PathBuf {
     dir.join(name)
 }
 
+/// A real 48×48 PNG, for zimcheck's illustration check.
+const PNG: &[u8] = include_bytes!("../examples/dot.png");
+
 fn html(body: &str) -> Vec<u8> {
     format!("<html><head><title>x</title></head><body><p>{body}</p></body></html>").into_bytes()
 }
@@ -24,7 +27,17 @@ fn sample(name: &str, compression: Compression, cluster_size: usize) -> PathBuf 
     c.add_metadata("Title", b"Test archive", "text/plain")
         .unwrap();
     c.add_metadata("Language", b"eng", "text/plain").unwrap();
-    c.add_illustration(48, b"\x89PNG fake").unwrap();
+    // The rest of zimcheck's mandatory metadata.
+    for (k, v) in [
+        ("Name", "test_en_sample"),
+        ("Creator", "zimfile"),
+        ("Publisher", "zimfile"),
+        ("Date", "2026-11-16"),
+        ("Description", "zimfile writer test"),
+    ] {
+        c.add_metadata(k, v.as_bytes(), "text/plain").unwrap();
+    }
+    c.add_illustration(48, PNG).unwrap();
     c.add_item(Item::new(
         "Home",
         "Home page",
@@ -46,8 +59,6 @@ fn sample(name: &str, compression: Compression, cluster_size: usize) -> PathBuf 
     c.add_item(Item::new("style.css", "", "text/css", "p{}"))
         .unwrap();
     c.add_item(Item::new("img.png", "", "image/png", vec![0u8; 300]))
-        .unwrap();
-    c.add_item(Item::new("empty.txt", "", "text/plain", ""))
         .unwrap();
     c.add_item(Item::new("nomime", "", "", "x")).unwrap();
     let mut hidden = Item::new(
@@ -103,16 +114,16 @@ fn check(path: &Path, many_clusters: bool) {
     assert_eq!((a.header().major, a.header().minor), (6, 3));
     assert!(a.has_front_articles_index());
     assert_eq!(a.metadata("Title").unwrap(), b"Test archive");
-    assert_eq!(a.metadata("Illustration_48x48@1").unwrap(), b"\x89PNG fake");
+    assert_eq!(a.metadata("Illustration_48x48@1").unwrap(), PNG);
     // Counter: C items by mimetype (parameters stripped), sorted.
     assert_eq!(
         String::from_utf8(a.metadata("Counter").unwrap()).unwrap(),
-        "application/octet-stream=1;image/png=1;text/css=1;text/html=46;text/plain=1"
+        "application/octet-stream=1;image/png=1;text/css=1;text/html=46"
     );
     // Front articles: 45 HTML pages (not Hidden) + the Fruit redirect.
     assert_eq!(a.article_count(), 46);
-    // C: 50 items + Fruit, Pomme, Early.
-    assert_eq!(a.entry_count(), 53);
+    // C: 49 items + Fruit, Pomme, Early.
+    assert_eq!(a.entry_count(), 52);
     let main = a.main_entry().unwrap();
     assert_eq!(a.resolve(&main).unwrap().path, "Home");
     let home = a.entry_by_path("Home").unwrap();
@@ -134,10 +145,6 @@ fn check(path: &Path, many_clusters: bool) {
     assert_eq!(
         (u.title.as_str(), a.content(&u).unwrap()),
         ("Ünïcødé", html("Non-ASCII"))
-    );
-    assert_eq!(
-        a.content(&a.entry_by_path("empty.txt").unwrap()).unwrap(),
-        b""
     );
     assert_eq!(
         a.content(&a.entry_by_path("img.png").unwrap()).unwrap(),
@@ -234,6 +241,17 @@ fn empty_archive_and_unfinished() {
     assert_eq!((a.entry_count(), a.article_count()), (0, 0));
     assert!(a.main_entry().is_none());
     assert!(a.verify_checksum().unwrap());
+    // An empty blob (zimcheck flags empty entries, so not in `sample`).
+    let path = tmp("empty_blob.zim");
+    let mut c = Creator::new(&path);
+    c.add_item(Item::new("empty.txt", "", "text/plain", ""))
+        .unwrap();
+    c.finish().unwrap();
+    let a = Archive::open(&path).unwrap();
+    assert_eq!(
+        a.content(&a.entry_by_path("empty.txt").unwrap()).unwrap(),
+        b""
+    );
     // Dropped without finish: no .tmp left behind.
     let path = tmp("unfinished.zim");
     let mut c = Creator::new(&path).cluster_size(10);
