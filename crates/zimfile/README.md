@@ -48,37 +48,10 @@ written: a 1 GiB file writes in under 3 MB of memory.
 
 ## Xapian indexes
 
-`Archive::search` and `Archive::suggest` read the archive's embedded Glass
-databases (`X/fulltext/xapian`, `X/title/xapian`) and rank like libzim on
-Xapian 1.4: the same query parsing, term generation (`removeAccents`, Xapian's
-word splitting, CJK n-grams, Snowball stemmers as Xapian 1.4 ships them), BM25
-parameters, sort and collapse. On 120 reference queries over two Kiwix
-archives, both return libzim's top 10 exactly (`tests/xapian.rs`).
-
-`Creator::index(lang)` writes both indexes the way libzim's creator does, so
-Kiwix searches the archives zimfile writes: `xapian-check` (1.4 and 2.1) finds
-no errors, `zimcheck -A` passes, and libzim returns the same results as zimfile
-on them. libzim's own suggestion and search tests are ported.
-
-Shortcuts, each harmless to libzim readers:
-
-| Shortcut | Cost | Upgrade |
-|---|---|---|
-| Only the postlist, docdata and position tables; termlist, spelling and synonym are empty, as in Kiwix's own indexes | No spelling correction, synonyms or term lists | A termlist writer (~80 lines) |
-| Tags are never compressed on write (compressed ones are read) | Indexes a few percent bigger | Deflate docdata tags |
-| Simple B-tree layout: unshortened branch keys, no freelist, not `sequential` | Slightly bigger branch levels | Shorten separators |
-| No stopwords, ever (libzim finds none for `eng`, so its archives have none) | Common words are indexed and must match | Ship libzim's stopword lists |
-| Query parser: what libzim's lowercase queries reach (no brackets, field prefixes, `AND`/`OR`/`NEAR`) | Unusual suggestion syntax may parse differently | Port more of the grammar |
-| Every match is scored exactly: no max-weight pruning | A very common word on a huge archive is slow | Xapian's weight bounds |
-| Snippets: a plain-text window around the first query word | Not Kiwix's snippets | Port `MSet::snippet` |
-| No geo search (geo values are written), no multi-archive search, no pre-Glass (Chert) indexes | — | — |
-| Title words over 240 bytes are dropped; libzim aborts the archive instead (`TitleIndexingError`) | — | — |
-| The writer holds the full-text index in memory until `finish` | RAM ≈ the index size (1–2 GB for all of English Wikipedia) | Spill sorted runs to disk |
-| Stemmers: `rust-stemmers` (Snowball 2017, identical to Xapian 1.4's English on 237,897 words), which lacks Armenian, Basque, Catalan, Indonesian, Irish, Lithuanian and Nepali | Archives in those 7 languages aren't stemmed, so search matches Kiwix's indexes poorly and Kiwix matches zimfile-written ones poorly | Generate Rust stemmers from Xapian 1.4's Snowball sources |
-
-Older libzim versions (e.g. the one that built the 2024-06 climate archive)
-left articles whose title equals their path out of the title index; current
-libzim, and zimfile, index them.
+`Archive::search`, `Archive::suggest` and `Creator::index` read and write the
+Xapian indexes Kiwix archives embed, ranking as Kiwix does. The engine is its
+own crate, [`zimfile-xapian`](../zimfile-xapian), which documents what's
+supported, how it was checked against libzim, and its shortcuts.
 
 Not ported from libzim:
 
