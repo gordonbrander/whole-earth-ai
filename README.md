@@ -33,7 +33,7 @@ zim-mcp library add wikipedia_en_all_nopic --dir ~/zim
 zim-mcp library list --dir ~/zim
 zim-mcp library update --dir ~/zim                   # newest versions; old files go once the new ones check out
 zim-mcp library remove wikipedia_en_all_nopic --dir ~/zim
-zim-mcp library status --dir ~/zim                   # downloads and indexing in progress
+zim-mcp library status --dir ~/zim                   # downloads in progress
 ```
 
 Downloads resume if interrupted, are checked against the sha256 Kiwix publishes,
@@ -43,27 +43,10 @@ The folder *is* the library: copy ZIM files in by hand and they just work.
 ### Full-text search indexes
 
 Kiwix archives carry their own Xapian search indexes, and zim-mcp searches
-those directly, ranking results the way Kiwix does: no build step. For the
-rare archive without one, search uses a [tantivy](https://github.com/quickwit-oss/tantivy)
-index built beside it. Those live in a hidden `.zimfile/` folder inside the
-archive folder, so the folder itself shows only your `.zim` files.
-`library add` and `library update` build one after the download if the
-archive needs it; for ZIM files copied in by hand, run:
-
-```sh
-zim-mcp index --dir ~/zim            # every archive without an index
-zim-mcp index wikipedia_en_all_nopic --dir ~/zim --force   # rebuild one
-```
-
-Until an archive has an index, search matches titles only (`list_archives` says
-"titles only"). `library list` shows each built index's size. Rough cost: the
-3 GB `wikipedia_en_top1m_mini` (1M articles) indexes in about a minute on an
-Apple Silicon laptop into 700 MB.
-
-`.zimfile/` holds nothing that can't be rebuilt: delete it to reset search, then
-run `zim-mcp index`. Copying the whole archive folder keeps the indexes;
-copying single `.zim` files doesn't. `library remove` deletes an archive's index
-with it, and `zim-mcp index` removes the indexes of archives deleted by hand.
+those directly, ranking results the way Kiwix does: no build step. The rare
+archive without one is searched by title only (`list_archives` says "titles
+only"). Earlier versions built indexes for those in a hidden `.zimfile/`
+folder; it's safe to delete.
 
 ## Use it with your AI tool
 
