@@ -40,22 +40,23 @@ The folder *is* the library: copy ZIM files in by hand and they just work.
 
 ### Full-text search indexes
 
-Search uses a [tantivy](https://github.com/quickwit-oss/tantivy) index per
-archive (the Xapian index inside Kiwix archives is not used). Indexes live in a
-hidden `.zimfile/` folder inside the archive folder, so the folder itself shows
-only your `.zim` files. `library add` and `library update` build the index after
-the download; for ZIM files copied in by hand, run:
+Kiwix archives carry their own Xapian search indexes, and zim-mcp searches
+those directly, ranking results the way Kiwix does: no build step. For the
+rare archive without one, search uses a [tantivy](https://github.com/quickwit-oss/tantivy)
+index built beside it. Those live in a hidden `.zimfile/` folder inside the
+archive folder, so the folder itself shows only your `.zim` files.
+`library add` and `library update` build one after the download if the
+archive needs it; for ZIM files copied in by hand, run:
 
 ```sh
 zim-mcp index --dir ~/zim            # every archive without an index
 zim-mcp index wikipedia_en_all_nopic --dir ~/zim --force   # rebuild one
 ```
 
-Until an archive has its index, search matches titles only (`list_archives` says
-"titles only"). `library list` shows each index's size. Rough cost: the 3 GB
-`wikipedia_en_top1m_mini` (1M articles) indexes in about a minute on an Apple
-Silicon laptop into 700 MB; full English Wikipedia takes proportionally longer
-and several GB.
+Until an archive has an index, search matches titles only (`list_archives` says
+"titles only"). `library list` shows each built index's size. Rough cost: the
+3 GB `wikipedia_en_top1m_mini` (1M articles) indexes in about a minute on an
+Apple Silicon laptop into 700 MB.
 
 `.zimfile/` holds nothing that can't be rebuilt: delete it to reset search, then
 run `zim-mcp index`. Copying the whole archive folder keeps the indexes;

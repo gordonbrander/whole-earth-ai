@@ -6,6 +6,7 @@
 
 pub(crate) struct Html {
     pub dump: String,
+    #[allow(dead_code)] // parsed as libzim does; libzim doesn't use it either
     pub title: String,
     pub keywords: String,
     pub indexing_allowed: bool,

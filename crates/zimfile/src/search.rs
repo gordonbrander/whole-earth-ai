@@ -1,5 +1,6 @@
 //! Full-text search through a tantivy index built from an archive's articles.
-//! Kiwix's embedded Xapian indexes are ignored.
+//! For archives without an embedded Xapian index: [`Archive::search`] and
+//! [`Archive::suggest`] use that one when it's there.
 //!
 //! Indexes live in a hidden folder beside the archives, one per archive:
 //!
