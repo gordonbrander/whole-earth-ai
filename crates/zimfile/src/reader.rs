@@ -306,7 +306,7 @@ impl Archive {
 
     /// `DirentLookup::findInRange` over `0..count`: `(found, index)`, where a
     /// miss gives the insertion point.
-    fn search(&self, ns: u8, key: &[u8], count: u32, by_title: bool) -> Result<(bool, u32)> {
+    fn bsearch(&self, ns: u8, key: &[u8], count: u32, by_title: bool) -> Result<(bool, u32)> {
         if count == 0 {
             return Ok((false, 0));
         }
@@ -335,7 +335,7 @@ impl Archive {
     }
 
     fn find(&self, ns: u8, path: &[u8]) -> Result<Option<u32>> {
-        let (found, i) = self.search(ns, path, self.header.entry_count, false)?;
+        let (found, i) = self.bsearch(ns, path, self.header.entry_count, false)?;
         Ok(found.then_some(i))
     }
 
@@ -582,7 +582,7 @@ impl Archive {
     pub fn entry_by_title(&self, title: &str) -> Option<Entry> {
         b"CAIJ-".iter().find_map(|&ns| {
             let (found, t) = self
-                .search(ns, title.as_bytes(), self.titles.1, true)
+                .bsearch(ns, title.as_bytes(), self.titles.1, true)
                 .ok()?;
             found.then(|| self.entry_at(self.title_at(t).ok()?).ok())?
         })
@@ -610,7 +610,7 @@ impl Archive {
         const PREFIX: &str = "Illustration_";
         let n = self.header.entry_count;
         let start = self
-            .search(b'M', PREFIX.as_bytes(), n, false)
+            .bsearch(b'M', PREFIX.as_bytes(), n, false)
             .map_or(n, |r| r.1);
         // Entry paths, as libzim compares them: long paths in old archives
         // (`M/…`), so those only ever offer the favicon.
@@ -726,9 +726,13 @@ impl Archive {
             .collect())
     }
 
-    /// Title suggestions without a Xapian index: the first `limit` entries
-    /// of [`find_by_title`](Self::find_by_title).
+    /// Title suggestions: through the embedded Xapian title index as libzim
+    /// ranks them, or without one, the first `limit` entries of
+    /// [`find_by_title`](Self::find_by_title).
     pub fn suggest(&self, query: &str, limit: usize) -> Vec<Entry> {
+        if let Some(v) = self.suggest_xapian(query, limit) {
+            return v;
+        }
         self.find_by_title(query)
             .take(limit)
             .filter_map(|t| self.entry_at_title(t).ok())
@@ -775,7 +779,7 @@ impl Archive {
             }
         };
         let n = self.header.entry_count;
-        let at = |ns, k: &[u8]| self.search(ns, k, n, false).map(|r| r.1);
+        let at = |ns, k: &[u8]| self.bsearch(ns, k, n, false).map(|r| r.1);
         let range = || -> Result<Range<u32>> {
             let begin = at(ns, p)?;
             let end = match next_prefix(p) {
@@ -800,7 +804,7 @@ impl Archive {
             b'A'
         };
         let n = self.titles.1;
-        let at = |k: &[u8]| self.search(ns, k, n, true).map(|r| r.1);
+        let at = |k: &[u8]| self.bsearch(ns, k, n, true).map(|r| r.1);
         match (at(prefix.as_bytes()), at(&next)) {
             (Ok(begin), Ok(end)) => begin..end.max(begin),
             _ => 0..0,

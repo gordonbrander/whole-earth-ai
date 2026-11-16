@@ -24,6 +24,7 @@ pub use format::Compression;
 pub use illustration::Illustration;
 pub use reader::{Archive, Check, Entry, validate};
 pub use writer::{Content, Creator, Item};
+pub use xsearch::{SearchHit, snippet};
 
 #[derive(Debug)]
 pub enum Error {

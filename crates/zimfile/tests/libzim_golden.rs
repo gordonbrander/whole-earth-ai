@@ -55,7 +55,12 @@ fn matches_libzim() {
                 }
                 "suggest" => {
                     let (q, want) = rest.split_once('\t').unwrap();
-                    let got: Vec<_> = a.suggest(q, 10).into_iter().map(|e| e.path).collect();
+                    // The title-prefix range (`findByTitle`), not Xapian suggestions.
+                    let got: Vec<_> = a
+                        .find_by_title(q)
+                        .take(10)
+                        .map(|t| a.entry_at_title(t).unwrap().path)
+                        .collect();
                     assert_eq!(got.join("|"), want, "{name}: {q:?}");
                 }
                 "entry" => {
