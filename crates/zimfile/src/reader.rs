@@ -9,7 +9,7 @@ use crate::file::Parts;
 use crate::format::{
     Cluster, Compression, DELETED, Dirent, HEADER_SIZE, Header, Kind, LINKTARGET, REDIRECT,
 };
-use crate::{Error, Illustration, Result};
+use crate::{Error, Illustration, Result, glass};
 use md5::{Digest, Md5};
 use std::cmp::Ordering;
 use std::io::Read;
@@ -86,7 +86,7 @@ pub fn validate(path: &Path, checks: &[Check]) -> Result<()> {
 }
 
 pub struct Archive {
-    file: Parts,
+    file: Arc<Parts>,
     header: Header,
     mimes: Vec<String>,
     /// User entries: the `C` range, or everything in old-namespace archives.
@@ -99,6 +99,9 @@ pub struct Archive {
     cache: Mutex<Vec<(u32, Arc<Cluster>)>>,
     /// User entries by cluster, built on first use.
     cluster_order: OnceLock<Vec<u32>>,
+    /// The embedded Xapian indexes, opened on first use.
+    fulltext_db: OnceLock<Option<glass::Db>>,
+    title_db: OnceLock<Option<glass::Db>>,
 }
 
 impl Archive {
@@ -143,13 +146,15 @@ impl Archive {
             8 * header.cluster_count as u64,
         )?;
         let mut a = Archive {
-            file,
+            file: Arc::new(file),
             header,
             mimes: vec![],
             user: (0, 0),
             titles: (0, 0, false),
             cache: Mutex::new(vec![]),
             cluster_order: OnceLock::new(),
+            fulltext_db: OnceLock::new(),
+            title_db: OnceLock::new(),
         };
         if a.header.cluster_count > 0 {
             let last = a.cluster_offset(a.header.cluster_count - 1)?;
@@ -506,6 +511,44 @@ impl Archive {
         }
         let (path, off) = self.file.locate(start, size)?;
         Some((path.to_path_buf(), off))
+    }
+
+    /// The embedded Xapian index (`X/fulltext/xapian`, or `Z//fulltextIndex/xapian`
+    /// in old archives; `X/title/xapian`), if it's there, stored
+    /// uncompressed in one part, and a Glass database.
+    pub(crate) fn xapian(&self, fulltext: bool) -> Option<&glass::Db> {
+        let cell = if fulltext {
+            &self.fulltext_db
+        } else {
+            &self.title_db
+        };
+        cell.get_or_init(|| {
+            let e = if fulltext {
+                self.entry_in('X', "fulltext/xapian")
+                    .or_else(|| self.entry_in('Z', "/fulltextIndex/xapian"))
+            } else {
+                self.entry_in('X', "title/xapian")
+            }?;
+            self.direct_access(&e)?;
+            let (_, start, size) = self.blob(&e).ok()?;
+            let src = Blob {
+                file: self.file.clone(),
+                start,
+                size,
+            };
+            glass::Db::open(Box::new(src)).ok()
+        })
+        .as_ref()
+    }
+
+    /// Whether the archive has a full-text index zimfile can search.
+    pub fn has_fulltext_index(&self) -> bool {
+        self.xapian(true).is_some()
+    }
+
+    /// Whether the archive has a title (suggestion) index zimfile can search.
+    pub fn has_title_index(&self) -> bool {
+        self.xapian(false).is_some()
     }
 
     /// `M/<name>`'s content, following redirects.
@@ -978,6 +1021,25 @@ fn count_mime(counter: &str, f: impl Fn(&str) -> bool) -> u32 {
         .filter(|(m, _)| f(m))
         .map(|(_, n)| n)
         .sum()
+}
+
+/// An uncompressed blob, read in place.
+struct Blob {
+    file: Arc<Parts>,
+    start: u64,
+    size: u64,
+}
+
+impl glass::Source for Blob {
+    fn read_at(&self, buf: &mut [u8], off: u64) -> Result<()> {
+        if off
+            .checked_add(buf.len() as u64)
+            .is_none_or(|e| e > self.size)
+        {
+            return Err(Error::Format("Xapian index: read past its end".into()));
+        }
+        self.file.read_into(buf, self.start + off)
+    }
 }
 
 #[cfg(test)]
