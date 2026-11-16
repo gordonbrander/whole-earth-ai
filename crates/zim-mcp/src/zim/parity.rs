@@ -141,3 +141,59 @@ fn zimfile_matches_libzim() {
         check(&p);
     }
 }
+
+/// libzim reads what zimfile writes, with the same answers.
+#[test]
+fn libzim_reads_zimfile_output() {
+    use zimfile::{Compression, Creator, Item};
+    let dir = std::env::temp_dir().join(format!("zim-parity-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, comp, size) in [
+        ("zstd.zim", Compression::Zstd, 2 << 20),
+        ("small.zim", Compression::Zstd, 300),
+        ("lzma.zim", Compression::Lzma, 4096),
+        ("none.zim", Compression::None, 4096),
+    ] {
+        let path = dir.join(name);
+        let mut c = Creator::new(&path)
+            .compression(comp)
+            .cluster_size(size)
+            .main_path("Main");
+        c.add_metadata("Title", b"Parity", "text/plain").unwrap();
+        c.add_metadata("Language", "eng".as_bytes(), "text/plain")
+            .unwrap();
+        c.add_illustration(48, b"png").unwrap();
+        c.add_item(Item::new("Main", "Main page", "text/html", "<p>main</p>"))
+            .unwrap();
+        for i in 0..60 {
+            let body = format!("<p>{}</p>", "word ".repeat(i));
+            c.add_item(Item::new(
+                &format!("A{i}"),
+                &format!("Article {i}"),
+                "text/html",
+                body,
+            ))
+            .unwrap();
+        }
+        c.add_item(Item::new("Ünï/路径", "", "text/html", "<p>x</p>"))
+            .unwrap();
+        c.add_item(Item::new("s.css", "", "text/css", "p{}"))
+            .unwrap();
+        c.add_item(Item::new("i.png", "", "image/png", vec![1u8; 500]))
+            .unwrap();
+        c.add_redirection("Alias", "Article alias", "A3", true)
+            .unwrap();
+        c.add_redirection("Chain", "Chain", "Alias", false).unwrap();
+        c.add_redirection("Gone", "Gone", "Nowhere", false).unwrap();
+        c.finish().unwrap();
+        check(&path);
+        let mut lib = Library::new();
+        lib.open("x".into(), &path).unwrap();
+        assert_eq!(lib.metadata(0, "Title"), "Parity");
+        assert_eq!(lib.article_count(0), 63);
+        assert!(lib.entry(0, "Gone").is_none());
+        let a3 = format!("<p>{}</p>", "word ".repeat(3)).into_bytes();
+        assert_eq!(lib.content(0, "Chain").unwrap(), a3);
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
