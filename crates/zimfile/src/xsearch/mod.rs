@@ -3,6 +3,6 @@
 
 #![allow(dead_code)] // until search and the writer use all of it
 
+pub mod html;
 pub mod index;
 pub mod text;
-pub mod html;

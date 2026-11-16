@@ -180,6 +180,63 @@ mod tests {
         );
     }
 
+    /// Every full-text document regenerates libzim's terms and wdfs, from
+    /// the article HTML and title.
+    #[test]
+    fn fulltext_matches_libzim() {
+        for a in archives() {
+            let db = a.xapian(true).unwrap();
+            let mut real: BTreeMap<u32, BTreeMap<Vec<u8>, u32>> = BTreeMap::new();
+            for (t, _) in db.terms(b"").unwrap() {
+                let mut pl = db.postlist(&t).unwrap().unwrap();
+                while pl.next().unwrap() {
+                    real.entry(pl.did())
+                        .or_default()
+                        .insert(t.clone(), pl.wdf());
+                }
+            }
+            let st = stemmer("eng");
+            let mut bad = vec![];
+            for did in 1..=db.stats.doccount {
+                let path = String::from_utf8(db.data(did).unwrap().unwrap()).unwrap();
+                let e = a.entry_by_path(&path[2..]).unwrap();
+                let html = a.content(&e).unwrap();
+                let h = crate::xsearch::html::parse(&String::from_utf8_lossy(&html));
+                let got = fulltext_terms(
+                    &remove_accents(&h.dump),
+                    &remove_accents(&e.title),
+                    &remove_accents(&h.keywords),
+                    st.as_ref(),
+                );
+                let got: BTreeMap<Vec<u8>, u32> = got.into_iter().map(|(k, v)| (k, v.0)).collect();
+                let want = real.remove(&did).unwrap_or_default();
+                if got != want {
+                    if bad.is_empty() {
+                        let only = |a: &BTreeMap<Vec<u8>, u32>, b: &BTreeMap<Vec<u8>, u32>| {
+                            a.iter()
+                                .filter(|(k, v)| b.get(*k) != Some(v))
+                                .map(|(k, v)| format!("{}:{v}", String::from_utf8_lossy(k)))
+                                .take(15)
+                                .collect::<Vec<_>>()
+                        };
+                        eprintln!(
+                            "{path}\n ours {:?}\nlibzim {:?}",
+                            only(&got, &want),
+                            only(&want, &got)
+                        );
+                    }
+                    bad.push(path);
+                }
+            }
+            assert!(
+                bad.is_empty(),
+                "{} of {} differ",
+                bad.len(),
+                db.stats.doccount
+            );
+        }
+    }
+
     #[test]
     fn words() {
         assert_eq!(count_words("  a b\tc\n\n d "), 4);
