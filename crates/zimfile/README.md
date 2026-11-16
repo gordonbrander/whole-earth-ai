@@ -3,11 +3,10 @@
 Read and write [ZIM](https://wiki.openzim.org/wiki/ZIM_file_format) archives
 (Kiwix, openZIM) in pure Rust: a port of libzim 9.8.2's reader and writer,
 including the Xapian full-text and title indexes Kiwix archives embed (read
-and written, without Xapian), plus a [tantivy](https://github.com/quickwit-oss/tantivy)
-index for archives that have none.
+and written, without Xapian).
 
 ```rust
-use zimfile::{Archive, Check, Content, Creator, Illustration, Item, search};
+use zimfile::{Archive, Check, Content, Creator, Illustration, Item};
 
 let a = Archive::open("wikipedia_en_100.zim".as_ref())?; // or a split .zimaa
 let e = a.entry_by_path("Earth").unwrap();
@@ -24,11 +23,6 @@ for &i in a.cluster_order()? {                  // fastest order to read everyth
 }
 let icon = a.illustration(&Illustration::square(48));
 a.check(Check::Checksum)?;                      // or zimfile::validate(path, &Check::ALL)
-
-// Archives without an embedded index: build a tantivy one beside them.
-search::build(&a, "wikipedia_en_100.zim".as_ref(), |_, _| {})?;
-let idx = search::open(&a, "wikipedia_en_100.zim".as_ref()).unwrap();
-let hits = idx.search(&a, "plate tectonics", 5)?;
 
 let mut c = Creator::new("hello.zim".as_ref()).main_path("hello").index("eng");
 c.add_metadata("Title", "Hello", "text/plain")?;
@@ -60,10 +54,5 @@ Not ported from libzim:
   ranges, for embedded or arbitrarily split archives.
 - The deprecated `getIllustrationSizes`, `configVerbose`, and the writer's
   worker threads (it compresses and indexes on one core).
-
-Tantivy search indexes live in a hidden folder beside the archives, one per archive
-(`.zimfile/index/<file>.zim.idx/`), so every program using zimfile shares them.
-They can be deleted and rebuilt; `search::prune(dir)` removes the indexes of
-archives that are gone.
 
 License: GPL-3.0-or-later.

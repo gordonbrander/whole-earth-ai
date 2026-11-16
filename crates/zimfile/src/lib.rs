@@ -12,14 +12,11 @@
 //! - [`Creator`] writes archives that libzim reads, streaming
 //!   [`Content::File`] items from disk, and with [`Creator::index`] embeds
 //!   the indexes Kiwix searches.
-//! - [`search`] builds and queries a tantivy full-text index for archives
-//!   without an embedded one, kept in a hidden `.zimfile/` folder beside them.
 
 mod file;
 pub mod format;
 mod illustration;
 mod reader;
-pub mod search;
 mod writer;
 mod xapian;
 
@@ -37,7 +34,7 @@ pub enum Error {
     Format(String),
     /// The writer was given something it can't write.
     Invalid(String),
-    /// From the full-text index.
+    /// From search.
     Search(String),
 }
 
