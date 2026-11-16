@@ -383,7 +383,6 @@ impl<'a> PostList<'a> {
         self.wdf
     }
 
-
     /// Advance to the next posting (the first, on the first call). False at the end.
     pub fn next(&mut self) -> Result<bool> {
         if self.ended {

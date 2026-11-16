@@ -72,6 +72,7 @@ Shortcuts, each harmless to libzim readers:
 | Every match is scored exactly: no max-weight pruning | A very common word on a huge archive is slow | Xapian's weight bounds |
 | Snippets: a plain-text window around the first query word | Not Kiwix's snippets | Port `MSet::snippet` |
 | No geo search (geo values are written), no multi-archive search, no pre-Glass (Chert) indexes | — | — |
+| Title words over 240 bytes are dropped; libzim aborts the archive instead (`TitleIndexingError`) | — | — |
 | The writer holds the full-text index in memory until `finish` | RAM ≈ the index size (1–2 GB for all of English Wikipedia) | Spill sorted runs to disk |
 | Stemmers: `rust-stemmers` (Snowball 2017, identical to Xapian 1.4's English on 237,897 words); today's Snowball (`frostem`) for the 7 languages it lacks | Those may stem a few words differently | Vendor Xapian 1.4's Snowball output |
 
