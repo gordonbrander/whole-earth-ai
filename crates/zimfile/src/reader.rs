@@ -7,7 +7,7 @@ use crate::{Error, Result};
 use md5::{Digest, Md5};
 use std::cmp::Ordering;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 const CACHE_CLUSTERS: usize = 16;
@@ -18,6 +18,8 @@ const WATCHDOG: u32 = 50;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
     pub index: u32,
+    /// `C` for user content in new archives; `A`, `I`, `-`, … in old ones.
+    pub namespace: char,
     /// In old-namespace archives this is the long path (`A/Foo`), as libzim reports it.
     pub path: String,
     /// The title, or the path when the title is empty.
@@ -50,8 +52,18 @@ pub struct Archive {
 }
 
 impl Archive {
+    /// Open `path`, or the split archive `<path>aa`, `<path>ab`, …
     pub fn open(path: &Path) -> Result<Archive> {
-        let file = Parts::open(path)?;
+        Archive::from_parts(Parts::open(path)?)
+    }
+
+    /// An archive stored as byte ranges `(file, offset, len)` that concatenate
+    /// into it: one embedded in another file, or split anyhow.
+    pub fn open_parts(parts: &[(PathBuf, u64, u64)]) -> Result<Archive> {
+        Archive::from_parts(Parts::open_ranges(parts)?)
+    }
+
+    fn from_parts(file: Parts) -> Result<Archive> {
         if file.size < HEADER_SIZE {
             return Err(Error::Format(
                 "zim-file is too small to contain a header".into(),
@@ -190,10 +202,12 @@ impl Archive {
         }
         drop(cache); // don't hold the lock while decompressing
         let off = self.cluster_offset(i)?;
-        let c = Arc::new(Cluster::read(
-            self.file.reader(off),
-            self.header.entry_count as u64,
-        )?);
+        let c = Cluster::read_lazy(self.file.reader(off), self.header.entry_count as u64)?;
+        let end = *c.offsets.last().unwrap();
+        if c.compression == Compression::None && off + 1 + end > self.file.size {
+            return Err(Error::Format("cluster is truncated".into()));
+        }
+        let c = Arc::new(c);
         let mut cache = self.cache.lock().unwrap();
         if cache.len() >= CACHE_CLUSTERS {
             cache.remove(0);
@@ -306,6 +320,7 @@ impl Archive {
         };
         Ok(Entry {
             index,
+            namespace: d.ns as char,
             path,
             title,
             mimetype,
@@ -392,24 +407,134 @@ impl Archive {
 
     /// The content of `e`, following redirects.
     pub fn content(&self, e: &Entry) -> Result<Vec<u8>> {
-        let e = self.resolve(e)?;
-        let c = self.cluster(e.cluster)?;
-        Ok(c.blob(e.blob).to_vec())
+        self.read(e, 0, u64::MAX)
     }
 
-    /// `M/<name>`, following redirects.
-    pub fn metadata(&self, name: &str) -> Option<Vec<u8>> {
-        let mut i = self.find(b'M', name.as_bytes()).ok()??;
-        let mut e = self.entry_at(i).ok()?;
-        for _ in 1..WATCHDOG {
-            let Some(t) = e.redirect else { break };
-            i = t;
-            e = self.entry_at(i).ok()?;
+    /// `e`'s cluster, and its blob's bounds there (redirects followed).
+    fn blob(&self, e: &Entry) -> Result<(Arc<Cluster>, u64, u64)> {
+        let e = self.resolve(e)?;
+        let c = self.cluster(e.cluster)?;
+        let (a, b) = c.bounds(e.blob);
+        let start = if c.compression == Compression::None {
+            self.cluster_offset(e.cluster)? + 1 + a // in the file
+        } else {
+            a // in the decompressed cluster
+        };
+        Ok((c, start, b - a))
+    }
+
+    /// The size of `e`'s content, following redirects.
+    pub fn item_size(&self, e: &Entry) -> Result<u64> {
+        Ok(self.blob(e)?.2)
+    }
+
+    /// Up to `len` bytes of `e`'s content from `offset` (redirects followed):
+    /// fewer at the end, none past it. An uncompressed blob is read from
+    /// the file alone, never whole.
+    pub fn read(&self, e: &Entry, offset: u64, len: u64) -> Result<Vec<u8>> {
+        let (c, start, size) = self.blob(e)?;
+        if offset > size {
+            return Ok(vec![]);
         }
-        if e.is_redirect() {
+        let len = len.min(size - offset);
+        if c.compression == Compression::None {
+            self.file.read(start + offset, len)
+        } else {
+            let a = (start + offset) as usize;
+            Ok(c.data[a..a + len as usize].to_vec())
+        }
+    }
+
+    /// Where `e`'s content lies, as-is, on disk: `(file, offset)`, for
+    /// handing to something that reads files. `None` if it's compressed or
+    /// split across two parts (libzim's `getDirectAccessInformation`).
+    pub fn direct_access(&self, e: &Entry) -> Option<(PathBuf, u64)> {
+        let (c, start, size) = self.blob(e).ok()?;
+        if c.compression != Compression::None {
             return None;
         }
-        self.content(&e).ok()
+        let (path, off) = self.file.locate(start, size)?;
+        Some((path.to_path_buf(), off))
+    }
+
+    /// `M/<name>`'s content, following redirects.
+    pub fn metadata(&self, name: &str) -> Option<Vec<u8>> {
+        self.content(&self.metadata_entry(name)?).ok()
+    }
+
+    /// `M/<name>`, redirects followed (libzim's `getMetadataItem`).
+    pub fn metadata_entry(&self, name: &str) -> Option<Entry> {
+        self.resolve(&self.entry_in('M', name)?).ok()
+    }
+
+    /// Every `M/` path, in path order (including `Counter`).
+    pub fn metadata_keys(&self) -> Vec<String> {
+        let range = || Ok::<_, Error>(self.ns_begin(b'M')?..self.ns_begin(b'N')?);
+        range()
+            .unwrap_or(0..0)
+            .filter_map(|i| self.dirent(i).ok())
+            .map(|d| String::from_utf8_lossy(&d.path).into_owned())
+            .collect()
+    }
+
+    /// `<ns>/<path>` exactly (libzim's `getEntryByPathWithNamespace`).
+    pub fn entry_in(&self, ns: char, path: &str) -> Option<Entry> {
+        let ns = u8::try_from(ns).ok()?;
+        self.entry_at(self.find(ns, path.as_bytes()).ok()??).ok()
+    }
+
+    /// The entry titled exactly `title`, in `C`, then `A`, `I`, `J`, `-`
+    /// (libzim's `getEntryByTitle`). Only titles in the title index count.
+    pub fn entry_by_title(&self, title: &str) -> Option<Entry> {
+        b"CAIJ-".iter().find_map(|&ns| {
+            let (found, t) = self
+                .search(ns, title.as_bytes(), self.titles.1, true)
+                .ok()?;
+            found.then(|| self.entry_at(self.title_at(t).ok()?).ok())?
+        })
+    }
+
+    /// A random article: from the title index (`A` in old archives).
+    /// Redirects are not skipped. `None` if there are none.
+    pub fn random_entry(&self) -> Option<Entry> {
+        let rand = |n: u32| {
+            // ponytail: modulo bias, under n / 2^32; use rejection sampling if that matters.
+            (n > 0).then(|| getrandom::u32().map(|r| r % n).ok())?
+        };
+        if self.header.new_namespaces() {
+            let t = rand(self.titles.1)?;
+            self.entry_at(self.title_at(t).ok()?).ok()
+        } else {
+            let (b, e) = (self.ns_begin(b'A').ok()?, self.ns_begin(b'B').ok()?);
+            self.entry_at(b + rand(e - b)?).ok()
+        }
+    }
+
+    /// The path the archive was opened from (`<base>aa` for a split archive;
+    /// the first part for `open_parts`).
+    pub fn path(&self) -> &Path {
+        &self.file.path
+    }
+
+    /// The archive's size in bytes (all parts).
+    pub fn file_size(&self) -> u64 {
+        self.file.size
+    }
+
+    pub fn is_multipart(&self) -> bool {
+        self.file.is_multipart()
+    }
+
+    /// The MD5 stored at the end of the archive, if any.
+    pub fn checksum(&self) -> Option<[u8; 16]> {
+        if !self.header.has_checksum() {
+            return None;
+        }
+        self.file
+            .read(self.header.checksum_pos, 16)
+            .ok()?
+            .try_into()
+            .ok()
     }
 
     /// Front articles (with the v1 listing), else the `M/Counter` `text/html*`

@@ -255,3 +255,150 @@ fn open_errors() {
         "Error opening as a split ZIM file: non_existant.zimaa"
     );
 }
+
+// libzim test/archive.cpp:289 openSplitZimArchive
+#[test]
+fn open_split_archive_path() {
+    for (p, cat) in data_files("wikibooks_be_all_nopic_2017-02_splitted.zim") {
+        let aa = PathBuf::from(format!("{}aa", p.display()));
+        for path in [&p, &aa] {
+            let a = Archive::open(path).unwrap();
+            assert_eq!(a.path(), aa, "{cat}");
+            assert!(a.is_multipart());
+            assert!(a.verify_checksum().unwrap());
+        }
+    }
+}
+
+#[test]
+fn checksum_and_size() {
+    for (p, cat) in data_files("small.zim") {
+        let a = Archive::open(&p).unwrap();
+        let raw = std::fs::read(&p).unwrap();
+        assert_eq!(a.file_size(), raw.len() as u64, "{cat}");
+        assert_eq!(a.checksum().unwrap()[..], raw[raw.len() - 16..], "{cat}");
+        assert!(!a.is_multipart());
+        assert_eq!(a.path(), p);
+    }
+}
+
+#[test]
+fn metadata_keys_and_entries() {
+    for (p, cat) in data_files("small.zim") {
+        let a = Archive::open(&p).unwrap();
+        let keys = a.metadata_keys();
+        assert!(keys.contains(&"Title".to_string()), "{cat}: {keys:?}");
+        assert!(keys.is_sorted());
+        for k in &keys {
+            let e = a.metadata_entry(k).unwrap();
+            assert!(!e.is_redirect());
+            assert_eq!(a.content(&e).unwrap(), a.metadata(k).unwrap());
+            assert_eq!(a.entry_in('M', k).unwrap().namespace, 'M');
+        }
+        assert!(a.metadata_entry("Nope").is_none());
+        assert!(
+            a.metadata_entry("Title")
+                .unwrap()
+                .mimetype
+                .starts_with("text/plain")
+        );
+    }
+}
+
+// libzim test/archive.cpp:584 randomEntry
+#[test]
+fn random_entry() {
+    for name in [
+        "wikibooks_be_all_nopic_2017-02.zim",
+        "wikibooks_be_all_nopic_2017-02_splitted.zim",
+        "wikipedia_en_climate_change_mini_2024-06.zim",
+    ] {
+        for (p, cat) in data_files(name) {
+            let a = Archive::open(&p).unwrap();
+            for _ in 0..20 {
+                let e = a.resolve(&a.random_entry().unwrap()).unwrap();
+                assert!(e.mimetype.contains("text/html"), "{cat}/{name}: {}", e.path);
+            }
+        }
+    }
+}
+
+#[test]
+fn entry_by_title_and_namespace() {
+    for (p, cat) in data_files("wikibooks_be_all_nopic_2017-02.zim") {
+        let a = Archive::open(&p).unwrap();
+        let main = a.resolve(&a.main_entry().unwrap()).unwrap();
+        let e = a.entry_by_title(&main.title).unwrap();
+        assert_eq!(a.resolve(&e).unwrap().index, main.index, "{cat}");
+        assert!(a.entry_by_title("unkownTitle").is_none());
+        let ns = if cat == "withns" { 'A' } else { 'C' };
+        assert_eq!(main.namespace, ns);
+        let short = main.path.trim_start_matches("A/");
+        assert_eq!(a.entry_in(ns, short).unwrap().index, main.index);
+        assert!(a.entry_in('Q', short).is_none());
+    }
+}
+
+/// `len` bytes at `off` in `path`, read as a direct-access caller would.
+fn read_file_at(path: &Path, off: u64, len: u64) -> Vec<u8> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).unwrap();
+    f.seek(SeekFrom::Start(off)).unwrap();
+    let mut v = vec![0; len as usize];
+    f.read_exact(&mut v).unwrap();
+    v
+}
+
+/// Every item with direct access reads the same from the file; returns how many.
+fn check_direct_access(a: &Archive) -> usize {
+    let mut n = 0;
+    for i in 0..a.all_entry_count() {
+        let e = a.entry_at(i).unwrap();
+        if e.is_redirect() {
+            continue;
+        }
+        if let Some((path, off)) = a.direct_access(&e) {
+            let size = a.item_size(&e).unwrap();
+            assert_eq!(
+                read_file_at(&path, off, size),
+                a.content(&e).unwrap(),
+                "{}",
+                e.path
+            );
+            n += 1;
+        }
+    }
+    n
+}
+
+// libzim test/archive.cpp:1057 getDirectAccessInformation
+#[test]
+fn direct_access() {
+    for (p, cat) in data_files("small.zim") {
+        let a = Archive::open(&p).unwrap();
+        assert_ne!(check_direct_access(&a), 0, "{cat}");
+    }
+}
+
+#[test]
+fn partial_reads() {
+    for (p, cat) in data_files("wikipedia_en_climate_change_mini_2024-06.zim") {
+        let a = Archive::open(&p).unwrap();
+        // An HTML page (compressed) and the first image (stored).
+        let html = a.resolve(&a.main_entry().unwrap()).unwrap();
+        let img = (0..a.entry_count())
+            .map(|i| a.entry_at(i).unwrap())
+            .find(|e| e.mimetype.starts_with("image/"))
+            .unwrap();
+        for e in [html, img] {
+            let all = a.content(&e).unwrap();
+            let size = a.item_size(&e).unwrap();
+            assert_eq!(size, all.len() as u64, "{cat} {}", e.path);
+            assert_eq!(a.read(&e, 0, size).unwrap(), all);
+            assert_eq!(a.read(&e, 3, 10).unwrap(), all[3..13]);
+            assert_eq!(a.read(&e, size - 2, 100).unwrap(), all[all.len() - 2..]);
+            assert!(a.read(&e, size, 10).unwrap().is_empty());
+            assert!(a.read(&e, size + 1, 10).unwrap().is_empty());
+        }
+    }
+}

@@ -256,21 +256,31 @@ pub struct Cluster {
 impl Cluster {
     /// Read a cluster from `r` (positioned at its info byte). `max_blobs` is
     /// the archive's entry count, as in libzim. Reads only as far as the last blob.
-    pub fn read(mut r: impl Read, max_blobs: u64) -> Result<Cluster> {
+    pub fn read(r: impl Read, max_blobs: u64) -> Result<Cluster> {
+        Cluster::read_inner(r, max_blobs, false)
+    }
+
+    /// As `read`, but an uncompressed cluster's blobs are left in the file:
+    /// `data` holds only the offset table, so blobs are read where they lie.
+    pub fn read_lazy(r: impl Read, max_blobs: u64) -> Result<Cluster> {
+        Cluster::read_inner(r, max_blobs, true)
+    }
+
+    fn read_inner(mut r: impl Read, max_blobs: u64, lazy: bool) -> Result<Cluster> {
         let mut info = [0];
         r.read_exact(&mut info)?;
         let compression = Compression::from_info(info[0])?;
         let wide = info[0] & 0x10 != 0;
         match compression {
-            Compression::None => Cluster::read_body(r, compression, wide, max_blobs),
+            Compression::None => Cluster::read_body(r, compression, wide, max_blobs, lazy),
             Compression::Zstd => {
                 let d = zstd::stream::read::Decoder::with_buffer(std::io::BufReader::new(r))?
                     .single_frame();
-                Cluster::read_body(d, compression, wide, max_blobs)
+                Cluster::read_body(d, compression, wide, max_blobs, false)
             }
             Compression::Lzma => {
                 let d = liblzma::read::XzDecoder::new(std::io::BufReader::new(r));
-                Cluster::read_body(d, compression, wide, max_blobs)
+                Cluster::read_body(d, compression, wide, max_blobs, false)
             }
         }
     }
@@ -281,6 +291,7 @@ impl Cluster {
         compression: Compression,
         wide: bool,
         max_blobs: u64,
+        lazy: bool,
     ) -> Result<Cluster> {
         let w: u64 = if wide { 8 } else { 4 };
         let mut data = vec![0; w as usize];
@@ -316,6 +327,13 @@ impl Cluster {
             return Err(bad("Error parsing cluster. Offsets are not ordered."));
         }
         let end = *offsets.last().unwrap();
+        if lazy {
+            return Ok(Cluster {
+                compression,
+                offsets,
+                data,
+            });
+        }
         // Grows as it reads: a corrupt huge offset fails on EOF, not on allocation.
         (&mut r).take(end - first).read_to_end(&mut data)?;
         if (data.len() as u64) < end {
@@ -332,13 +350,19 @@ impl Cluster {
         (self.offsets.len() - 1) as u32
     }
 
-    /// Blob `i`, or empty when out of range (as libzim's `Cluster::getBlob`).
-    pub fn blob(&self, i: u32) -> &[u8] {
+    /// Blob `i`'s `(start, end)` from the start of the offset table; `(0, 0)`
+    /// when out of range (an empty blob, as libzim's `Cluster::getBlob`).
+    pub fn bounds(&self, i: u32) -> (u64, u64) {
         if i >= self.count() {
-            return &[];
+            return (0, 0);
         }
-        let i = i as usize;
-        &self.data[self.offsets[i] as usize..self.offsets[i + 1] as usize]
+        (self.offsets[i as usize], self.offsets[i as usize + 1])
+    }
+
+    /// Blob `i`, or empty when out of range. Not for `read_lazy` clusters.
+    pub fn blob(&self, i: u32) -> &[u8] {
+        let (a, b) = self.bounds(i);
+        &self.data[a as usize..b as usize]
     }
 }
 

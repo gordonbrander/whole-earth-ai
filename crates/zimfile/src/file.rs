@@ -6,10 +6,21 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+pub(crate) struct Part {
+    file: File,
+    pub path: PathBuf,
+    /// Where the part starts in `file` (non-zero for an embedded archive).
+    offset: u64,
+    /// Where the part starts in the logical file.
+    start: u64,
+    len: u64,
+}
+
 pub(crate) struct Parts {
-    /// (file, logical start, length), in order.
-    parts: Vec<(File, u64, u64)>,
+    parts: Vec<Part>,
     pub size: u64,
+    /// libzim's `getFilename`: the path as opened, or `<base>aa` for a split archive.
+    pub path: PathBuf,
 }
 
 #[cfg(unix)]
@@ -43,15 +54,11 @@ impl Parts {
             && let Ok(f) = File::open(path)
         {
             let len = f.metadata()?.len();
-            return Ok(Parts {
-                parts: vec![(f, 0, len)],
-                size: len,
-            });
+            return Ok(Parts::new(vec![(f, path.into(), 0, len)]));
         }
         let base = s.strip_suffix("aa").filter(|_| s.ends_with(".zimaa"));
         let base = base.unwrap_or(&s).to_string();
         let mut parts = vec![];
-        let mut size = 0;
         'outer: for a in b'a'..=b'z' {
             for b in b'a'..=b'z' {
                 let name = PathBuf::from(format!("{base}{}{}", a as char, b as char));
@@ -59,8 +66,7 @@ impl Parts {
                     break 'outer;
                 };
                 let len = f.metadata()?.len();
-                parts.push((f, size, len));
-                size += len;
+                parts.push((f, name, 0, len));
             }
         }
         if parts.is_empty() {
@@ -74,7 +80,62 @@ impl Parts {
                 format!("Error opening {split}ZIM file: {}", path.display()),
             )));
         }
-        Ok(Parts { parts, size })
+        let mut p = Parts::new(parts);
+        p.path = format!("{base}aa").into();
+        Ok(p)
+    }
+
+    /// Byte ranges `(file, offset, len)` that concatenate into one archive.
+    pub fn open_ranges(ranges: &[(PathBuf, u64, u64)]) -> Result<Parts> {
+        let mut parts = vec![];
+        for (path, offset, len) in ranges {
+            let f = File::open(path)?;
+            let flen = f.metadata()?.len();
+            if offset.checked_add(*len).is_none_or(|end| end > flen) {
+                return Err(Error::Format(format!(
+                    "{}: range {offset} (+{len}) is past the end of the file",
+                    path.display()
+                )));
+            }
+            parts.push((f, path.clone(), *offset, *len));
+        }
+        if parts.is_empty() {
+            return Err(Error::Format("no parts given".into()));
+        }
+        Ok(Parts::new(parts))
+    }
+
+    fn new(ranges: Vec<(File, PathBuf, u64, u64)>) -> Parts {
+        let path = ranges[0].1.clone();
+        let mut size = 0;
+        let parts = ranges
+            .into_iter()
+            .map(|(file, path, offset, len)| {
+                let start = size;
+                size += len;
+                Part {
+                    file,
+                    path,
+                    offset,
+                    start,
+                    len,
+                }
+            })
+            .collect();
+        Parts { parts, size, path }
+    }
+
+    pub fn is_multipart(&self) -> bool {
+        self.parts.len() > 1
+    }
+
+    /// The part holding logical bytes `off..off + len`, and the physical
+    /// offset there; `None` if they span parts.
+    pub fn locate(&self, off: u64, len: u64) -> Option<(&Path, u64)> {
+        let p = self
+            .parts
+            .get(self.parts.partition_point(|p| p.start + p.len <= off))?;
+        (off + len <= p.start + p.len).then(|| (p.path.as_path(), p.offset + off - p.start))
     }
 
     pub fn read_into(&self, mut buf: &mut [u8], mut off: u64) -> Result<()> {
@@ -88,13 +149,11 @@ impl Parts {
             )));
         }
         // First part that ends after `off`.
-        let mut i = self
-            .parts
-            .partition_point(|(_, start, len)| start + len <= off);
+        let mut i = self.parts.partition_point(|p| p.start + p.len <= off);
         while !buf.is_empty() {
-            let (f, start, len) = &self.parts[i];
-            let n = buf.len().min((start + len - off) as usize);
-            read_exact_at(f, &mut buf[..n], off - start)?;
+            let p = &self.parts[i];
+            let n = buf.len().min((p.start + p.len - off) as usize);
+            read_exact_at(&p.file, &mut buf[..n], p.offset + off - p.start)?;
             buf = &mut buf[n..];
             off += n as u64;
             i += 1;
