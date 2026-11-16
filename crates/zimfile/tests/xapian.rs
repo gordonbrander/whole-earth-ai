@@ -1,0 +1,148 @@
+//! zimfile's search and suggestions over archives' embedded Xapian indexes,
+//! against libzim's results for the same queries (`tests/golden/xapian/`).
+
+use std::path::PathBuf;
+use zimfile::Archive;
+
+fn dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+/// `(archive, golden name)`: the climate archive (`just testdata`) and
+/// zim-mcp's nollywood one.
+fn archives() -> Vec<(Archive, &'static str)> {
+    [
+        (
+            "tests/data/nons/wikipedia_en_climate_change_mini_2024-06.zim",
+            "climate",
+        ),
+        (
+            "../zim-mcp/tests/data/wikipedia_en_nollywood_maxi_2026-10.zim",
+            "nollywood",
+        ),
+    ]
+    .into_iter()
+    .map(|(p, n)| {
+        (
+            Archive::open(&dir().join(p)).expect("test data missing: run `just testdata`"),
+            n,
+        )
+    })
+    .collect()
+}
+
+/// Golden results: (query, top-10 paths).
+fn golden(file: &str) -> Vec<(String, Vec<String>)> {
+    let text = std::fs::read_to_string(dir().join("tests/golden/xapian").join(file)).unwrap();
+    let mut out: Vec<(String, Vec<String>)> = vec![];
+    for line in text.lines() {
+        if let Some(q) = line.strip_prefix("== ") {
+            out.push((q.to_string(), vec![]));
+        } else if !line.starts_with("# ") {
+            out.last_mut().unwrap().1.push(line.to_string());
+        }
+    }
+    out
+}
+
+/// How many queries give exactly libzim's top 10, in order (all, today).
+fn compare(name: &str, run: impl Fn(&str) -> Vec<String>) -> usize {
+    let mut exact = 0;
+    let cases = golden(name);
+    for (q, want) in &cases {
+        let got = run(q);
+        if &got == want {
+            exact += 1;
+        } else {
+            eprintln!("{name}: {q:?}\n   ours {got:?}\n libzim {want:?}");
+        }
+    }
+    eprintln!("{name}: {exact}/{} exact", cases.len());
+    exact
+}
+
+#[test]
+fn search_matches_libzim() {
+    for (a, n) in archives() {
+        assert!(a.has_fulltext_index());
+        let exact = compare(&format!("{n}.search.txt"), |q| {
+            a.search(q, 10)
+                .unwrap()
+                .into_iter()
+                .map(|h| h.entry.path)
+                .collect()
+        });
+        assert_eq!(exact, 30, "{n}: searches differing from libzim");
+    }
+}
+
+#[test]
+fn suggest_matches_libzim() {
+    for (a, n) in archives() {
+        assert!(a.has_title_index());
+        let exact = compare(&format!("{n}.suggest.txt"), |q| {
+            a.suggest(q, 10).into_iter().map(|e| e.path).collect()
+        });
+        assert_eq!(exact, 30, "{n}: suggestions differing from libzim");
+    }
+}
+
+/// Write `a` again with `Creator::index`, like `examples/repack.rs`.
+fn repack(a: &Archive, dst: &std::path::Path) {
+    use std::collections::HashSet;
+    use zimfile::{Compression, Content, Creator, Item};
+    let mut c = Creator::new(dst)
+        .compression(Compression::None)
+        .index("eng");
+    let front: HashSet<u32> = a.front_articles().unwrap().into_iter().collect();
+    for i in a.by_path() {
+        let e = a.entry_at(i).unwrap();
+        match e.redirect {
+            Some(t) => {
+                let t = a.entry_at(t).unwrap();
+                c.add_redirection(&e.path, &e.title, &t.path, front.contains(&i))
+                    .unwrap();
+            }
+            None => {
+                let content = Content::Bytes(a.content(&e).unwrap());
+                let mut item = Item::new(&e.path, &e.title, &e.mimetype, content);
+                item.front = Some(front.contains(&i));
+                c.add_item(item).unwrap();
+            }
+        }
+    }
+    c.finish().unwrap();
+}
+
+/// An archive zimfile indexes searches like the original libzim indexed:
+/// the same suggestions, and the same search hits with the same scores
+/// (ties may come in another order: docids are assigned differently).
+#[test]
+fn written_indexes_match_libzim() {
+    let (a, n) = archives().pop().unwrap(); // nollywood: built by a current libzim
+    let out = std::env::temp_dir().join("zimfile-xapian-repack.zim");
+    repack(&a, &out);
+    let b = Archive::open(&out).unwrap();
+    assert!(b.has_fulltext_index() && b.has_title_index());
+    let exact = compare(&format!("{n}.suggest.txt"), |q| {
+        b.suggest(q, 10).into_iter().map(|e| e.path).collect()
+    });
+    assert_eq!(exact, 30);
+    for (q, _) in golden(&format!("{n}.search.txt")) {
+        let hits = |z: &Archive| {
+            let mut v: Vec<(String, String)> = z
+                .search(&q, 50)
+                .unwrap()
+                .into_iter()
+                .map(|h| (format!("{:.9}", h.score), h.entry.path))
+                .collect();
+            // The last score may be a tie cut differently: drop it.
+            let last = v.last().map(|x| x.0.clone());
+            v.retain(|x| Some(&x.0) != last.as_ref());
+            v.sort();
+            v
+        };
+        assert_eq!(hits(&a), hits(&b), "{q:?}");
+    }
+    std::fs::remove_file(&out).unwrap();
+}

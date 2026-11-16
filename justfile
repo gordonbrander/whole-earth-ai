@@ -1,6 +1,4 @@
-# zim-mcp: build and test. Needs libzim: `brew install libzim` (then
-# LIBZIM_DIR=$(brew --prefix libzim), since Homebrew's ICU is keg-only) or
-# `apt install libzim-dev`.
+# zim-mcp and zimfile: build and test (pure Rust; `just testdata` first).
 # Whole Earth drive: `just fetch`, then `just assemble /Volumes/WHOLE-EARTH`.
 
 repo := env("ZIM_MCP_REPO", "gordonbrander/zim-mcp")
@@ -11,7 +9,28 @@ build:
     cargo build --release
 
 test:
-    cargo test
+    cargo test --workspace
+
+# Test data (gitignored): openZIM's zim-testing-suite at a pinned commit, and
+# a small real archive for zim-mcp's end-to-end golden tests.
+testdata:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    suite=2edf72096208e60c82b6ebbe313baa552cc6af52
+    d=crates/zimfile/tests/data
+    if [ ! -f "$d/.commit" ] || [ "$(cat "$d/.commit")" != "$suite" ]; then
+      rm -rf "$d" && mkdir -p "$d"
+      curl -fsSL "https://github.com/openzim/zim-testing-suite/archive/$suite.tar.gz" \
+        | tar xz -C "$d" --strip-components=2 "zim-testing-suite-$suite/data"
+      echo "$suite" > "$d/.commit"
+    fi
+    f=crates/zim-mcp/tests/data/wikipedia_en_nollywood_maxi_2026-10.zim
+    if [ ! -f "$f" ]; then
+      mkdir -p "$(dirname "$f")"
+      curl -fL --retry 3 -o "$f.part" "https://download.kiwix.org/zim/wikipedia/$(basename "$f")"
+      mv "$f.part" "$f"
+    fi
+    echo "faa53e0c8ef641206867ce21f0e107d4e2aa9012e3b2263f05fe9bddf4f72aa3  $f" | (if command -v shasum >/dev/null; then shasum -a 256 -c; else sha256sum -c; fi)
 
 # Download llamafile, the model and the zim-mcp release archives in the manifest, and check them.
 # Files already in bundle/downloads are only checked. zim-mcp releases come through `gh`.

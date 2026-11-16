@@ -1,0 +1,50 @@
+all_entry_count	16
+entry_count	2
+article_count	1
+main	mainPage
+meta	Title	Test ZIM file
+meta	Language	en
+meta	Date	2021-06-02
+meta	License	
+meta	Source	
+meta	Creator	N/A
+meta	Scraper	zimwriterfs-2.2.0
+meta	Counter	image/png=1;text/html=1
+meta	Name	
+suggest	A	
+suggest	B	
+suggest	C	
+suggest	M	
+suggest	N	
+suggest	S	
+suggest	T	main.html
+suggest	a	
+suggest	m	
+suggest	Л	
+suggest	Б	
+suggest	Укр	
+suggest	Пер	
+suggest	1	
+suggest	The	
+suggest	Nol	
+suggest	Gen	
+suggest	Africa	
+suggest	main	
+suggest	favicon	
+entry	0	favicon.png	favicon.png	image/png		b600e5eae0a12841bc2c34e39088491adce51f666ac3f0b38bfa1dc90c6ed36a
+entry	1	main.html	Test ZIM file	text/html		8cc715ee4a4d923be832972e117c964b65cb22b4ecccd531b663f451f93a9260
+entry	2	Counter	Counter	text/plain		a9454438585f0ce00b7cc6efbed3fd2d3529e79ff7344014fc8a190eac56cb83
+entry	3	Creator	Creator	text/plain		e2f79e5b60330bba4c289962231b6ba2957d0b14e7deb3110417003c79dea635
+entry	4	Date	Date	text/plain		d85d5c6de5c71fb1363b83ce82984b274a79988dce4a526498d90045d556cdac
+entry	5	Description	Description	text/plain		e2f79e5b60330bba4c289962231b6ba2957d0b14e7deb3110417003c79dea635
+entry	6	Illustration_48x48@1	Illustration_48x48@1	image/png		b600e5eae0a12841bc2c34e39088491adce51f666ac3f0b38bfa1dc90c6ed36a
+entry	7	Language	Language	text/plain		dbd3a49d0d906b4ed9216b73330d2fb080ef2f758c12f3885068222e5e17151c
+entry	8	Publisher	Publisher	text/plain		e2f79e5b60330bba4c289962231b6ba2957d0b14e7deb3110417003c79dea635
+entry	9	Scraper	Scraper	text/plain		da31e532ee70681d9b585e75f29c914f5044b446a94f26943b104484a480f1ec
+entry	10	Tags	Tags	text/plain		06b42a91cdd847ce0f6d05c1160bcbc0341fd388ac5405682de6e6e86db0929b
+entry	11	Title	Title	text/plain		51ab33291629b5d296f35a9a4870dc3424a0b135a41e2e5ee8f6e3cfeaba93d4
+entry	12	mainPage	mainPage		main.html	8cc715ee4a4d923be832972e117c964b65cb22b4ecccd531b663f451f93a9260
+entry	13	listing/titleOrdered/v0	listing/titleOrdered/v0	application/octet-stream+zimlisting		b5441d4d8bac165c793ae0700f86d6c97bea6e775fe07a12351c20fe1219b750
+entry	14	listing/titleOrdered/v1	listing/titleOrdered/v1	application/octet-stream+zimlisting		67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450
+entry	15	title/xapian	title/xapian	application/octet-stream+xapian		a0e62a3679b271d9439aabf30b59c30d8f218297f60c218c8a44dd871b203456
+entries_sha256	fc90dd9dd06ea88434e3781df39621eb56821105e51abf0a2095c86753041039

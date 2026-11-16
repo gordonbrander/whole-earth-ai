@@ -1,0 +1,51 @@
+all_entry_count	17
+entry_count	17
+article_count	1
+main	A/main.html
+meta	Title	=Test ZIM file
+meta	Language	=en
+meta	Date	2020-11-15
+meta	License	
+meta	Source	
+meta	Creator	=
+meta	Scraper	
+meta	Counter	image/png=1;text/html=1;
+meta	Name	
+suggest	A	
+suggest	B	
+suggest	C	
+suggest	M	
+suggest	N	
+suggest	S	
+suggest	T	A/main.html
+suggest	a	
+suggest	m	
+suggest	Л	
+suggest	Б	
+suggest	Укр	
+suggest	Пер	
+suggest	1	
+suggest	The	
+suggest	Nol	
+suggest	Gen	
+suggest	Africa	
+suggest	main	
+suggest	favicon	
+entry	0	-/favicon	favicon		I/favicon.png	b600e5eae0a12841bc2c34e39088491adce51f666ac3f0b38bfa1dc90c6ed36a
+entry	1	A/main.html	Test ZIM file	text/html		8cc715ee4a4d923be832972e117c964b65cb22b4ecccd531b663f451f93a9260
+entry	2	I/favicon.png	favicon.png	image/png		b600e5eae0a12841bc2c34e39088491adce51f666ac3f0b38bfa1dc90c6ed36a
+entry	3	M/Counter	Counter	text/plain		ba9f9aeee7087d5b9abf19037d60d794221b675f5e4af7afbac48268e1e55897
+entry	4	M/Creator	Creator	text/plain		380918b946a526640a40df5dced6516794f3d97bbd9e6bb553d037c4439f31c3
+entry	5	M/Date	Date	text/plain		fc848235d3adbcc85d053b615cc37cb4228f8c0475d64ddfb0b9bb29cfea7f73
+entry	6	M/Description	Description	text/plain		380918b946a526640a40df5dced6516794f3d97bbd9e6bb553d037c4439f31c3
+entry	7	M/Flavour	Flavour	text/plain		e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entry	8	M/Language	Language	text/plain		537497df80fd7dadd8e477aa8923e4f50db3ce977a6b5b32e198eb571888c4c4
+entry	9	M/Name	Name	text/plain		e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entry	10	M/Publisher	Publisher	text/plain		380918b946a526640a40df5dced6516794f3d97bbd9e6bb553d037c4439f31c3
+entry	11	M/Scraper	Scraper	text/plain		e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entry	12	M/Source	Source	text/plain		e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entry	13	M/Tags	Tags	text/plain		1a06d656b22acefa88c6489a8418c63eeb0ef1a61bf629b36420a00588afe5cb
+entry	14	M/Title	Title	text/plain		4dcc5f467ed1a9960f07be71ac0e82494c9883caba281a2d9b791d3622d108d9
+entry	15	X/fulltext/xapian	Xapian Fulltext Index	application/octet-stream+xapian		f8a39436fa009239c2965cfeb4e9b489d9d343b0ebd9ee128160b03774109187
+entry	16	X/title/xapian	Xapian Title Index	application/octet-stream+xapian		f1fce59427014f49f7840825ee589899cbf091e4b08be07c375c1f5dc33d2ff8
+entries_sha256	418747e2e2647f3fc5b4357c95a2abcec4b662c1678658c3946633598778b41d

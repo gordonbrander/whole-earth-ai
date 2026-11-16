@@ -1,2 +1,3 @@
 bundle/downloads/
 /target
+crates/*/tests/data/

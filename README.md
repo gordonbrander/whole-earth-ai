@@ -3,7 +3,7 @@
 Offline access to [Kiwix](https://kiwix.org) ZIM archives (Wikipedia, Wiktionary,
 Wikivoyage, Stack Exchange…) for any AI tool. One binary, three jobs:
 
-- **serve** archives over MCP (stdio), with full-text search through Kiwix's own libzim;
+- **serve** archives over MCP (stdio), with full-text search;
 - **manage** the library: browse the Kiwix catalog, download, verify, update, remove;
 - **export** articles as Markdown with attribution front matter.
 
@@ -12,19 +12,18 @@ Works with any AI that supports MCP, (including local AIs such as Llamafile).
 ## Install
 
 Download the archive for your OS from GitHub Releases and unpack it anywhere:
-`zim-mcp` and the libzim libraries it needs sit side by side, nothing else to install.
+one self-contained `zim-mcp` binary, nothing else to install.
 
-Or build it with Cargo, against a libzim installed on your system:
+Or build it with Cargo (pure Rust, no system libraries needed):
 
 ```sh
-# macOS (Homebrew's ICU is keg-only, so point at libzim directly)
-brew install libzim
-LIBZIM_DIR=$(brew --prefix libzim) cargo install zim-mcp
-
-# Debian / Ubuntu
-sudo apt install libzim-dev
 cargo install zim-mcp
 ```
+
+ZIM files are read by [`zimfile`](crates/zimfile), a pure-Rust port of
+Kiwix's libzim (reader and writer) that lives in this repository, and searched
+with [`zimfile-xapian`](crates/zimfile-xapian), its reimplementation of
+libzim's Xapian search indexes.
 
 ## Get some archives
 
@@ -40,6 +39,13 @@ zim-mcp library status --dir ~/zim                   # downloads in progress
 Downloads resume if interrupted, are checked against the sha256 Kiwix publishes,
 and only appear in the folder (as `<name>_<YYYY-MM>.zim`) once they check out.
 The folder *is* the library: copy ZIM files in by hand and they just work.
+
+### Full-text search indexes
+
+Kiwix archives carry their own Xapian search indexes, and zim-mcp searches
+those directly, ranking results the way Kiwix does: no build step. The rare
+archive without one is searched by title only (`list_archives` says "titles
+only").
 
 ## Use it with your AI tool
 
@@ -102,11 +108,16 @@ computer: Wikipedia, `zim-mcp`, a small local model and llamafile, with a
 double-click launcher that opens a chat page in your browser. No network, no install.
 
 ```sh
-just pin-release v0.1.0         # pin a zim-mcp release in bundle/manifest.sha256
+just pin-release v0.3.0         # pin a zim-mcp release in bundle/manifest.sha256
 just assemble /Volumes/WHOLE-EARTH
 ```
 
+`assemble` adds archives with `zim-mcp library add`, which downloads and checks
+them. Kiwix archives come with their search indexes, so the drive ships ready
+to search.
+
 ## License
 
-GPL-3.0-or-later. Release archives include libzim (GPL-2.0-or-later) and a
-`SOURCE.txt` pointing to the exact source of both.
+GPL-3.0-or-later: `zim-mcp`, `zimfile` and `zimfile-xapian` (ports of libzim,
+which is GPL-2.0-or-later). Release archives include a `SOURCE.txt` pointing to the
+exact source.

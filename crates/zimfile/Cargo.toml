@@ -1,0 +1,21 @@
+[package]
+name = "zimfile"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Read and write ZIM archives (Kiwix, openZIM) and their Xapian search indexes in pure Rust"
+repository = "https://github.com/gordonbrander/zim-mcp"
+readme = "README.md"
+keywords = ["zim", "kiwix", "openzim", "wikipedia", "offline"]
+categories = ["parser-implementations", "encoding"]
+include = ["/src/**", "/README.md", "/LICENSE"]
+
+[dependencies]
+getrandom = "0.4.3"
+liblzma = { version = "0.4.9", features = ["static"] }
+md-5 = "0.11.0"
+zimfile-xapian = { path = "../zimfile-xapian", version = "0.1.0" }
+zstd = "0.14.4"
+
+[dev-dependencies]
+sha2 = "0.11.1"
