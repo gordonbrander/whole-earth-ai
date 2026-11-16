@@ -14,7 +14,6 @@ include = ["/src/**", "/README.md", "/LICENSE"]
 getrandom = "0.4.3"
 liblzma = { version = "0.4.9", features = ["static"] }
 md-5 = "0.11.0"
-tantivy = "0.27.0"
 zimfile-xapian = { path = "../zimfile-xapian", version = "0.1.0" }
 zstd = "0.14.4"
 
