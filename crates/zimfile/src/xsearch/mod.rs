@@ -5,3 +5,4 @@
 
 pub mod index;
 pub mod text;
+pub mod html;
