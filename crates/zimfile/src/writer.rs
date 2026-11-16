@@ -461,6 +461,29 @@ impl Creator {
         Ok(())
     }
 
+    /// Add `C/<path>` as another name for `C/<target>`, which must exist:
+    /// the same content without a copy, or the same redirect (libzim's
+    /// `addAlias`). Not counted in `M/Counter`.
+    pub fn add_alias(&mut self, path: &str, title: &str, target: &str, front: bool) -> Result<()> {
+        self.ok()?;
+        let t = match self.dirents.get(&(b'C', target.as_bytes().to_vec())) {
+            Some(d) if !matches!(d.target, Target::Placeholder) => d.target.clone(),
+            _ => {
+                return Err(Error::Invalid(format!(
+                    "Impossible to alias C/{target} as C/{path}\nC/{target} doesn't exist."
+                )));
+            }
+        };
+        self.check_new(b'C', path, title)?;
+        let d = WDirent {
+            title: title_bytes(path, title),
+            target: t,
+            front,
+        };
+        self.put(b'C', path, d);
+        Ok(())
+    }
+
     /// Drop redirects to missing entries, and loops and chains that don't end
     /// at content (`detectDanglingRedirects`, `removeLoopsAndBlindChainsOfRedirects`).
     fn drop_bad_redirects(&mut self) {

@@ -95,6 +95,17 @@ fn sample(name: &str, compression: Compression, cluster_size: usize) -> PathBuf 
         .unwrap();
     c.add_redirection("LoopA", "LoopA", "LoopB", false).unwrap();
     c.add_redirection("LoopB", "LoopB", "LoopA", false).unwrap();
+    // Streamed from a file; an alias (another name for Home, not front).
+    let notes = tmp(&format!("{name}.notes.txt"));
+    std::fs::write(&notes, "Notes streamed from a file.").unwrap();
+    c.add_item(Item::new(
+        "notes.txt",
+        "",
+        "text/plain",
+        Content::File(notes),
+    ))
+    .unwrap();
+    c.add_alias("Home2", "Home again", "Home", false).unwrap();
     // Duplicates are refused.
     assert!(
         c.add_item(Item::new("Home", "Again", "text/html", "x"))
@@ -120,12 +131,21 @@ fn check(path: &Path, many_clusters: bool) {
     // Counter: C items by mimetype (parameters stripped), sorted.
     assert_eq!(
         String::from_utf8(a.metadata("Counter").unwrap()).unwrap(),
-        "application/octet-stream=1;image/png=1;text/css=1;text/html=46"
+        "application/octet-stream=1;image/png=1;text/css=1;text/html=46;text/plain=1"
     );
     // Front articles: 45 HTML pages (not Hidden) + the Fruit redirect.
     assert_eq!(a.article_count(), 46);
-    // C: 49 items + Fruit, Pomme, Early.
-    assert_eq!(a.entry_count(), 52);
+    // C: 50 items + Fruit, Pomme, Early + the Home2 alias.
+    assert_eq!(a.entry_count(), 54);
+    assert_eq!(
+        a.content(&a.entry_by_path("notes.txt").unwrap()).unwrap(),
+        b"Notes streamed from a file."
+    );
+    let home2 = a.entry_by_path("Home2").unwrap();
+    assert_eq!(
+        (home2.title.as_str(), a.content(&home2).unwrap()),
+        ("Home again", html("Welcome home"))
+    );
     let main = a.main_entry().unwrap();
     assert_eq!(a.resolve(&main).unwrap().path, "Home");
     let home = a.entry_by_path("Home").unwrap();
@@ -782,4 +802,206 @@ fn failed_cluster_write_poisons_the_creator() {
     );
     assert!(c.finish().is_err());
     assert!(!p.exists() && !tmp("poisoned.zim.tmp").exists());
+}
+
+// libzim test/creator.cpp:526 aliases
+#[test]
+fn aliases() {
+    let (mut c, p) = creator("aliases.zim");
+    c.add_item(item("item", "An item", "<html/>")).unwrap();
+    c.add_redirection("redirect", "A redirect", "item", false)
+        .unwrap();
+    c.add_alias("item_alias", "An item alias", "item", false)
+        .unwrap();
+    c.add_alias("redirect_alias", "A redirect alias", "redirect", false)
+        .unwrap();
+    let e = c.add_alias(
+        "a_dangling_alias",
+        "A dangling alias",
+        "no_such_entry",
+        false,
+    );
+    assert_eq!(
+        e.unwrap_err().to_string(),
+        "Impossible to alias C/no_such_entry as C/a_dangling_alias\nC/no_such_entry doesn't exist."
+    );
+    assert!(
+        c.add_alias(
+            "self_alias",
+            "A self-referencing alias",
+            "self_alias",
+            false
+        )
+        .is_err()
+    );
+    c.finish().unwrap();
+    let a = Archive::open(&p).unwrap();
+    assert_item(&a, "item", "An item", "text/html", "<html/>");
+    assert_item(&a, "item_alias", "An item alias", "text/html", "<html/>");
+    assert_redirect(&a, "redirect", "A redirect", "item");
+    assert_redirect(&a, "redirect_alias", "A redirect alias", "item");
+    assert_missing(&a, "a_dangling_alias");
+    assert_missing(&a, "self_alias");
+    // Aliases aren't counted.
+    assert_eq!(a.metadata("Counter").unwrap(), b"text/html=1");
+}
+
+// libzim test/creator.cpp:487 redirectAddedBeforeItsTargetIsCreated
+#[test]
+fn redirect_added_before_its_target() {
+    let (mut c, p) = creator("redirect_before.zim");
+    c.add_redirection("r1", "Redirect to an item", "item", false)
+        .unwrap();
+    c.add_redirection("r2", "Redirect to an item alias", "item_alias", false)
+        .unwrap();
+    c.add_redirection("r3", "Redirect to another redirect", "redirect", false)
+        .unwrap();
+    c.add_redirection("r4", "Redirect to a redirect alias", "redir_alias", false)
+        .unwrap();
+    c.add_item(item("item", "An item", "")).unwrap();
+    c.add_alias("item_alias", "An alias of an item", "item", false)
+        .unwrap();
+    c.add_redirection("redirect", "Safe redirect to an item", "item", false)
+        .unwrap();
+    c.add_alias("redir_alias", "An alias of a redirect", "redirect", false)
+        .unwrap();
+    c.finish().unwrap();
+    let a = Archive::open(&p).unwrap();
+    assert_item(&a, "item", "An item", "text/html", "");
+    assert_item(&a, "item_alias", "An alias of an item", "text/html", "");
+    assert_redirect(&a, "redirect", "Safe redirect to an item", "item");
+    assert_redirect(&a, "redir_alias", "An alias of a redirect", "item");
+    assert_redirect(&a, "r1", "Redirect to an item", "item");
+    assert_redirect(&a, "r2", "Redirect to an item alias", "item_alias");
+    assert_redirect(&a, "r3", "Redirect to another redirect", "redirect");
+    assert_redirect(&a, "r4", "Redirect to a redirect alias", "redir_alias");
+}
+
+// libzim test/creator.cpp:671 attemptingToOverwriteAnExistingEntryWithAnAlias
+#[test]
+fn attempting_to_overwrite_with_an_alias() {
+    let (mut c, p) = creator("overwrite_alias.zim");
+    c.add_item(item("item1", "Item#1", "It empowers everyone"))
+        .unwrap();
+    c.add_item(item("item2", "Item#2", "It embarrasses us"))
+        .unwrap();
+    c.add_redirection("redir1", "Redirect#1", "item1", false)
+        .unwrap();
+    c.add_redirection("redir2", "Redirect#2", "item2", false)
+        .unwrap();
+    for (path, target) in [
+        ("item2", "item1"),
+        ("item1", "item1"),
+        ("item1", "redir1"),
+        ("redir2", "redir1"),
+        ("redir1", "redir1"),
+        ("redir2", "item1"),
+    ] {
+        assert!(
+            c.add_alias(path, "an alias", target, false).is_err(),
+            "{path} -> {target}"
+        );
+    }
+    c.finish().unwrap();
+    let a = Archive::open(&p).unwrap();
+    assert_item(&a, "item1", "Item#1", "text/html", "It empowers everyone");
+    assert_item(&a, "item2", "Item#2", "text/html", "It embarrasses us");
+    assert_redirect(&a, "redir1", "Redirect#1", "item1");
+    assert_redirect(&a, "redir2", "Redirect#2", "item2");
+}
+
+// libzim test/creator.cpp:208 createZim, read at the format level as libzim does.
+#[test]
+fn create_zim() {
+    use zimfile::format::{Cluster, Compression as C, Dirent, Header, Kind};
+    let (mut c, p) = creator("create_zim.zim");
+    c = c.main_path("foo");
+    c.add_item(item("foo", "Foo", "FooContent")).unwrap();
+    assert!(c.add_item(item("foo", "Foo", "FooContent")).is_err());
+    c.add_item(item("foo2", "AFoo", "Foo2Content")).unwrap(); // title order ≠ path order
+    c.add_alias("foo_bis", "The same Foo", "foo2", false)
+        .unwrap();
+    c.add_metadata("Title", "This is a title", "text/plain;charset=utf-8")
+        .unwrap();
+    c.add_illustration(&Illustration::square(48), "PNGBinaryContent48")
+        .unwrap();
+    c.add_illustration(&Illustration::square(96), "PNGBinaryContent96")
+        .unwrap();
+    c.add_redirection("foo3", "FooRedirection", "foo", false)
+        .unwrap(); // not front
+    c.add_alias("foo_ter", "The same redirection", "foo3", true)
+        .unwrap(); // front
+    c.add_redirection("foo4", "FooRedirection", "NoExistant", true)
+        .unwrap(); // dropped
+    c.finish().unwrap();
+
+    let raw = std::fs::read(&p).unwrap();
+    let h = Header::parse(&raw[..80]).unwrap();
+    assert_ne!(h.main_page, u32::MAX);
+    assert_eq!(h.entry_count, 11);
+    assert_eq!(h.title_idx_pos, u64::MAX);
+    let u64_at = |o: u64| u64::from_le_bytes(raw[o as usize..o as usize + 8].try_into().unwrap());
+    let dirent = |i: u32| {
+        let off = u64_at(h.path_ptr_pos + 8 * i as u64) as usize;
+        Dirent::parse(&raw[off..]).unwrap().unwrap()
+    };
+    let (listing, png, html, plain, plain_utf8) = (0u16, 1, 2, 3, 4);
+    let item_at = |i: u32, ns: u8, path: &str, title: &str, mime: u16, cluster: u32| {
+        let d = dirent(i);
+        assert_eq!(
+            (d.ns, d.path.as_slice(), d.title.as_slice()),
+            (ns, path.as_bytes(), title.as_bytes()),
+            "#{i}"
+        );
+        let Kind::Item {
+            mime: m,
+            cluster: c,
+            blob,
+        } = d.kind
+        else {
+            panic!("#{i} is not an item")
+        };
+        assert_eq!((m, c), (mime, cluster), "#{i}");
+        blob
+    };
+    let redirect_at = |i: u32, ns: u8, path: &str, title: &str, target: u32| {
+        let d = dirent(i);
+        assert_eq!(
+            (d.ns, d.path.as_slice(), d.title()),
+            (ns, path.as_bytes(), title.as_bytes()),
+            "#{i}"
+        );
+        assert_eq!(d.kind, Kind::Redirect(target), "#{i}");
+    };
+    let foo = item_at(0, b'C', "foo", "Foo", html, 0);
+    let foo2 = item_at(1, b'C', "foo2", "AFoo", html, 0);
+    redirect_at(2, b'C', "foo3", "FooRedirection", 0);
+    assert_eq!(item_at(3, b'C', "foo_bis", "The same Foo", html, 0), foo2);
+    redirect_at(4, b'C', "foo_ter", "The same redirection", 0);
+    let counter = item_at(5, b'M', "Counter", "", plain, 0);
+    let ill48 = item_at(6, b'M', "Illustration_48x48@1", "", png, 1);
+    let ill96 = item_at(7, b'M', "Illustration_96x96@1", "", png, 1);
+    let title = item_at(8, b'M', "Title", "", plain_utf8, 0);
+    redirect_at(9, b'W', "mainPage", "mainPage", 0);
+    let v1 = item_at(10, b'X', "listing/titleOrdered/v1", "", listing, 1);
+
+    let cluster = |i: u64| {
+        Cluster::read(
+            &raw[u64_at(h.cluster_ptr_pos + 8 * i) as usize..],
+            h.entry_count as u64,
+        )
+        .unwrap()
+    };
+    let c0 = cluster(0);
+    assert_eq!((c0.compression, c0.count()), (C::Zstd, 4));
+    assert_eq!(c0.blob(foo), b"FooContent");
+    assert_eq!(c0.blob(foo2), b"Foo2Content");
+    assert_eq!(c0.blob(title), b"This is a title");
+    assert_eq!(c0.blob(counter), b"text/html=2");
+    let c1 = cluster(1);
+    assert_eq!((c1.compression, c1.count()), (C::None, 3));
+    // AFoo (1), Foo (0), The same redirection (4).
+    assert_eq!(c1.blob(v1), [1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0]);
+    assert_eq!(c1.blob(ill48), b"PNGBinaryContent48");
+    assert_eq!(c1.blob(ill96), b"PNGBinaryContent96");
 }
