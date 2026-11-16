@@ -2,7 +2,8 @@
 //! metadata, main page, uuid), then check that every `C` entry survived:
 //! path, title, mimetype, redirect target and content SHA-256.
 //!
-//! `cargo run --release --example repack -- in.zim out.zim`
+//! `cargo run --release --example repack -- in.zim out.zim [--index eng]`
+//! (`--index`: embed Xapian full-text and title indexes, in that language).
 
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -10,14 +11,19 @@ use std::path::{Path, PathBuf};
 use zimfile::{Archive, Content, Creator, Item};
 
 fn main() -> zimfile::Result<()> {
-    let args: Vec<PathBuf> = std::env::args_os().skip(1).map(Into::into).collect();
-    let [src, dst] = &args[..] else {
-        eprintln!("usage: repack <in.zim> <out.zim>");
-        std::process::exit(2);
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let (src, dst, lang) = match &args[..] {
+        [s, d] => (s, d, None),
+        [s, d, flag, l] if flag == "--index" => (s, d, Some(l.as_str())),
+        _ => {
+            eprintln!("usage: repack <in.zim> <out.zim> [--index <lang>]");
+            std::process::exit(2);
+        }
     };
-    let a = Archive::open(src)?;
-    repack(&a, dst)?;
-    let (want, got) = (entries(&a)?, entries(&Archive::open(dst)?)?);
+    let (src, dst) = (PathBuf::from(src), PathBuf::from(dst));
+    let a = Archive::open(&src)?;
+    repack(&a, &dst, lang)?;
+    let (want, got) = (entries(&a)?, entries(&Archive::open(&dst)?)?);
     let same = want.iter().zip(&got).filter(|(w, g)| w == g).count();
     println!("{same} of {} C entries identical", want.len());
     if want != got {
@@ -34,13 +40,16 @@ fn main() -> zimfile::Result<()> {
 
 // ponytail: new-namespace archives only (every archive since 2021); old ones
 // would need their `A/`, `I/`, … paths mapped onto `C/`.
-fn repack(a: &Archive, dst: &Path) -> zimfile::Result<()> {
+fn repack(a: &Archive, dst: &Path, index: Option<&str>) -> zimfile::Result<()> {
     if !a.header().new_namespaces() {
         return Err(zimfile::Error::Invalid(
             "old-namespace archives aren't supported".into(),
         ));
     }
     let mut c = Creator::new(dst).uuid(a.uuid());
+    if let Some(lang) = index {
+        c = c.index(lang);
+    }
     if let Some(main) = a.main_entry() {
         c = c.main_path(&a.resolve(&main)?.path);
     }

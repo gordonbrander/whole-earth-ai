@@ -7,6 +7,8 @@
 //! dirents in path order · path pointers · cluster pointers · MD5.
 
 use crate::format::{Compression, DELETED, Dirent, HEADER_SIZE, Header, Kind};
+use crate::glass::write::Builder;
+use crate::xsearch::{index as xindex, text};
 use crate::{Error, Illustration, Result};
 use md5::{Digest, Md5};
 use std::collections::{BTreeMap, HashMap};
@@ -179,6 +181,17 @@ pub struct Creator {
     counter: BTreeMap<String, u32>,
     /// A cluster write failed: the file is unusable, every call errors.
     failed: bool,
+    /// Building Xapian indexes ([`Creator::index`]).
+    index: Option<Indexing>,
+}
+
+/// The indexes being built: the language, its stemmer, the full-text index
+/// (in memory as items are added), and the temporary files at `finish`.
+struct Indexing {
+    language: String,
+    stemmer: Option<text::Stemmer>,
+    fulltext: Builder,
+    tmp: Vec<PathBuf>,
 }
 
 impl Creator {
@@ -207,6 +220,7 @@ impl Creator {
             offsets: vec![],
             counter: BTreeMap::new(),
             failed: false,
+            index: None,
         }
     }
 
@@ -234,6 +248,21 @@ impl Creator {
     }
     pub fn uuid(mut self, u: [u8; 16]) -> Self {
         self.uuid = Some(u);
+        self
+    }
+    /// Embed Xapian indexes that libzim (Kiwix) searches: `X/fulltext/xapian`
+    /// over the HTML items and `X/title/xapian` over the front articles'
+    /// titles. `language` is ISO 639-3 (`eng`), like `M/Language`; it picks
+    /// the stemmer. No stopwords are used, as in libzim's own archives.
+    // ponytail: the full-text index is held in memory until `finish` (about
+    // its final size); spill sorted runs to disk if huge archives need it.
+    pub fn index(mut self, language: &str) -> Self {
+        self.index = Some(Indexing {
+            language: language.into(),
+            stemmer: text::stemmer(language),
+            fulltext: Builder::default(),
+            tmp: vec![],
+        });
         self
     }
 
@@ -388,6 +417,21 @@ impl Creator {
         let front = item.front.unwrap_or(mime.starts_with("text/html"));
         let compress = item.compress.unwrap_or(compressible(&mime));
         let m = self.mime(&mime)?;
+        if let Some(ix) = &mut self.index
+            && mime.starts_with("text/html")
+        {
+            let html = match &item.content {
+                Content::Bytes(b) => String::from_utf8_lossy(b).into_owned(),
+                Content::File(p) => String::from_utf8_lossy(&std::fs::read(p)?).into_owned(),
+            };
+            xindex::add_fulltext(
+                &mut ix.fulltext,
+                &item.path,
+                &item.title,
+                &html,
+                ix.stemmer.as_ref(),
+            );
+        }
         let (cluster, blob) = self.add_data(item.content, compress)?;
         let clean = &mime[..mime.find([';', ' ', '\t']).unwrap_or(mime.len())];
         if !clean.is_empty() {
@@ -549,6 +593,8 @@ impl Creator {
             },
         );
 
+        self.add_indexes()?;
+
         // Every dirent exists from here on: indexes are positions in path order.
         let listing_mime = self.mime("application/octet-stream+zimlisting")?;
         let listing_key = (b'X', LISTING.to_vec());
@@ -705,6 +751,69 @@ impl Creator {
         std::fs::rename(&self.tmp, &self.path)?;
         Ok(())
     }
+
+    /// Write the Xapian indexes (`X/fulltext/xapian`, `X/title/xapian`) to
+    /// temporary files and add them, uncompressed (libzim reads them in place).
+    fn add_indexes(&mut self) -> Result<()> {
+        let Some(mut ix) = self.index.take() else {
+            return Ok(());
+        };
+        // Titles: the front articles in path order, as libzim's `indexTitles`.
+        let mut titles = Builder::default();
+        for ((ns, path), d) in &self.dirents {
+            if *ns != b'C' || !d.front {
+                continue;
+            }
+            let path = String::from_utf8_lossy(path);
+            let title = if d.title.is_empty() {
+                path.clone()
+            } else {
+                String::from_utf8_lossy(&d.title)
+            };
+            let target = match &d.target {
+                Target::Redirect(_, t) => Some(String::from_utf8_lossy(t).into_owned()),
+                _ => None,
+            };
+            xindex::add_title(
+                &mut titles,
+                &path,
+                &title,
+                target.as_deref(),
+                ix.stemmer.as_ref(),
+            );
+        }
+        let fulltext = std::mem::take(&mut ix.fulltext);
+        for (name, mut b, is_fulltext) in [("fulltext", fulltext, true), ("title", titles, false)] {
+            if b.doccount() == 0 {
+                continue;
+            }
+            xindex::set_metadata(&mut b, is_fulltext, &ix.language);
+            let mut tmp = self.path.as_os_str().to_owned();
+            tmp.push(format!(".xapian-{name}.tmp"));
+            let tmp = PathBuf::from(tmp);
+            ix.tmp.push(tmp.clone());
+            let mut uuid = [0; 16];
+            getrandom::fill(&mut uuid).map_err(|e| Error::Io(io::Error::other(e)))?;
+            let mut f = BufWriter::new(File::create(&tmp)?);
+            b.write(&mut f, uuid)?;
+            f.into_inner().map_err(|e| e.into_error())?.sync_all()?;
+            drop(b);
+            let m = self.mime("application/octet-stream+xapian")?;
+            let (cluster, blob) = self.add_data(Content::File(tmp), false)?;
+            self.put(
+                b'X',
+                &format!("{name}/xapian"),
+                WDirent {
+                    title: vec![],
+                    target: Target::Item(m, cluster, blob),
+                    front: false,
+                },
+            );
+        }
+        // Kept until the clusters holding them are written; removed on drop.
+        self.index = Some(ix);
+        Ok(())
+    }
 }
 
 impl Drop for Creator {
@@ -712,6 +821,9 @@ impl Drop for Creator {
     fn drop(&mut self) {
         if self.out.take().is_some() {
             let _ = std::fs::remove_file(&self.tmp);
+        }
+        for t in self.index.iter().flat_map(|ix| &ix.tmp) {
+            let _ = std::fs::remove_file(t);
         }
     }
 }
