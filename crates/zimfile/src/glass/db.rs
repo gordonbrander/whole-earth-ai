@@ -88,8 +88,8 @@ pub fn docdata_key(did: u32) -> Vec<u8> {
 
 /// If `key` is a term's first postlist chunk, the term.
 fn term_of(key: &[u8]) -> Option<Vec<u8>> {
-    if key.first() == Some(&0) && key.get(1) != Some(&0xff) {
-        return None; // metadata, values, doclens
+    if key.is_empty() || key[0] == 0 && key.get(1) != Some(&0xff) {
+        return None; // the null item, metadata, values, doclens
     }
     let mut p = key;
     let t = pack::sort_string(&mut p);
