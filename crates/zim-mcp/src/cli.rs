@@ -144,16 +144,18 @@ pub fn catalog_md(entries: &[catalog::CatalogEntry]) -> String {
     if entries.is_empty() {
         return "Nothing found in the catalog.".into();
     }
+    // Bare, padded names so a double-click copies exactly the archive name.
+    let w = entries.iter().map(|e| e.name.len()).max().unwrap_or(0);
     entries
         .iter()
         .map(|e| {
             format!(
-                "- **{}** ({}) {} · {} · {} · {}",
+                "{:<w$}  {}  {:>9}  {} · {} · {}",
                 e.name,
                 e.date,
+                library::human_size(e.size),
                 e.title,
                 e.language,
-                library::human_size(e.size),
                 e.summary
             )
         })
@@ -166,6 +168,7 @@ pub fn local_md(dir: &Path) -> Result<String, String> {
     if list.is_empty() {
         return Ok(format!("No archives in {}.", dir.display()));
     }
+    let w = list.iter().map(|a| a.name.len()).max().unwrap_or(0);
     Ok(list
         .iter()
         .map(|a| {
@@ -176,7 +179,7 @@ pub fn local_md(dir: &Path) -> Result<String, String> {
                 "titles only"
             };
             format!(
-                "- **{}** {} · {} · {index} · {}",
+                "{:<w$}  {}  {:>9}  {index} · {}",
                 a.name,
                 a.date,
                 library::human_size(size),
