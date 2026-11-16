@@ -4,7 +4,7 @@
 use crate::{library, markdown, zim};
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::PathBuf;
 
 const SNIPPET_CHARS: usize = 200;
 const PAGE_BYTES: usize = 3000;
@@ -42,11 +42,10 @@ pub struct ArchiveSummary {
     pub has_fulltext: bool,
 }
 
-/// Open the newest version of each archive in `dir`, or only `only`.
-fn open(dir: &Path, only: Option<&str>) -> Result<zim::Library, String> {
+/// Open the newest version of each archive across `dirs`, or only `only`.
+fn open(dirs: &[PathBuf], only: Option<&str>) -> Result<zim::Library, String> {
     let mut lib = zim::Library::new();
-    let archives =
-        library::newest(dir).map_err(|e| format!("can't read {}: {e}", dir.display()))?;
+    let archives = library::newest(dirs)?;
     for a in archives
         .into_iter()
         .filter(|a| only.is_none_or(|n| n == a.name))
@@ -65,12 +64,12 @@ fn open(dir: &Path, only: Option<&str>) -> Result<zim::Library, String> {
 }
 
 pub fn search(
-    dir: &Path,
+    dirs: &[PathBuf],
     query: &str,
     archive: Option<&str>,
     limit: u32,
 ) -> Result<Vec<SearchHit>, String> {
-    let lib = open(dir, archive)?;
+    let lib = open(dirs, archive)?;
     let limit = limit.clamp(1, 50);
     let mut hits = vec![];
     for a in 0..lib.archives.len() {
@@ -113,9 +112,14 @@ pub fn parse_id(id: &str) -> Result<(&str, &str), String> {
         })
 }
 
-pub fn read(dir: &Path, id: &str, page: usize, section: Option<&str>) -> Result<Article, String> {
+pub fn read(
+    dirs: &[PathBuf],
+    id: &str,
+    page: usize,
+    section: Option<&str>,
+) -> Result<Article, String> {
     let (name, path) = parse_id(id)?;
-    let lib = open(dir, Some(name))?;
+    let lib = open(dirs, Some(name))?;
     let mut entry = lib
         .entry(0, path)
         .ok_or_else(|| format!("no article {id:?}"))?;
@@ -165,9 +169,9 @@ pub fn read(dir: &Path, id: &str, page: usize, section: Option<&str>) -> Result<
     })
 }
 
-pub fn list_archives(dir: &Path) -> Result<Vec<ArchiveSummary>, String> {
-    let lib = open(dir, None)?;
-    let dates: BTreeMap<String, String> = library::newest(dir)
+pub fn list_archives(dirs: &[PathBuf]) -> Result<Vec<ArchiveSummary>, String> {
+    let lib = open(dirs, None)?;
+    let dates: BTreeMap<String, String> = library::newest(dirs)
         .unwrap_or_default()
         .into_iter()
         .map(|a| (a.name, a.date))

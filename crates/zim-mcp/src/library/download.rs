@@ -95,7 +95,7 @@ pub fn plan(dir: &Path, spec: &str) -> Result<Plan, String> {
 
 /// Archives in `dir` with a newer catalog version (all of them, or only `names`).
 pub fn plan_update(dir: &Path, names: &[String]) -> Result<Vec<Plan>, String> {
-    let local: Vec<LocalArchive> = newest(dir).map_err(|e| e.to_string())?;
+    let local: Vec<LocalArchive> = newest(&[dir.to_path_buf()])?;
     let mut plans = vec![];
     for a in local
         .iter()

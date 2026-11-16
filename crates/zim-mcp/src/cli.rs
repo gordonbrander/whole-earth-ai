@@ -19,10 +19,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Serve the archives in DIR over MCP (stdio).
+    /// Serve the archives in DIR over MCP (stdio). Repeat --dir to serve several
+    /// folders; library changes go to the first.
     Serve {
-        #[arg(long, default_value = ".")]
-        dir: PathBuf,
+        #[arg(long = "dir", default_value = ".")]
+        dirs: Vec<PathBuf>,
         /// Hide the library tools (fewer tools suit small models).
         #[arg(long)]
         no_library: bool,
@@ -30,10 +31,10 @@ enum Command {
         #[arg(long)]
         trust_client_approval: bool,
     },
-    /// Full-text search across the archives in DIR.
+    /// Full-text search across the archives in DIR (repeatable).
     Search {
-        #[arg(long, default_value = ".")]
-        dir: PathBuf,
+        #[arg(long = "dir", default_value = ".")]
+        dirs: Vec<PathBuf>,
         query: String,
         #[arg(long)]
         archive: Option<String>,
@@ -44,8 +45,8 @@ enum Command {
     },
     /// Read an article by id (`<archive>/<path>`) as Markdown.
     Read {
-        #[arg(long, default_value = ".")]
-        dir: PathBuf,
+        #[arg(long = "dir", default_value = ".")]
+        dirs: Vec<PathBuf>,
         id: String,
         #[arg(long, default_value_t = 1)]
         page: usize,
@@ -54,10 +55,10 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// List the archives in DIR.
+    /// List the archives in DIR (repeatable).
     List {
-        #[arg(long, default_value = ".")]
-        dir: PathBuf,
+        #[arg(long = "dir", default_value = ".")]
+        dirs: Vec<PathBuf>,
         #[arg(long)]
         json: bool,
     },
@@ -189,34 +190,34 @@ pub fn local_md(dir: &Path) -> Result<String, String> {
 pub fn run() -> Result<(), String> {
     match Cli::parse().command {
         Command::Serve {
-            dir,
+            dirs,
             no_library,
             trust_client_approval,
-        } => mcp::serve(dir, no_library, trust_client_approval),
+        } => mcp::serve(dirs, no_library, trust_client_approval),
         Command::Search {
-            dir,
+            dirs,
             query,
             archive,
             limit,
             json,
         } => {
-            let hits = tools::search(&dir, &query, archive.as_deref(), limit)?;
+            let hits = tools::search(&dirs, &query, archive.as_deref(), limit)?;
             print(json, &hits, || tools::hits_md(&hits));
             Ok(())
         }
         Command::Read {
-            dir,
+            dirs,
             id,
             page,
             section,
             json,
         } => {
-            let a = tools::read(&dir, &id, page, section.as_deref())?;
+            let a = tools::read(&dirs, &id, page, section.as_deref())?;
             print(json, &a, || tools::article_md(&a));
             Ok(())
         }
-        Command::List { dir, json } => {
-            let l = tools::list_archives(&dir)?;
+        Command::List { dirs, json } => {
+            let l = tools::list_archives(&dirs)?;
             print(json, &l, || tools::archives_md(&l));
             Ok(())
         }
