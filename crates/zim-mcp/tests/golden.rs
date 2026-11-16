@@ -1,7 +1,8 @@
 //! Replays `list`, `read` and `export` on the fixture archive and compares
 //! with outputs captured from the libzim build (`tests/golden/`), byte for byte.
-//! Search checks only that the expected article is in the top 5. The fixture's
-//! full-text index is built first (`zim-mcp index`), as `library add` would.
+//! Search checks only that the expected article is in the top 5 (the fixture
+//! embeds a Xapian index, so these are Kiwix's results). `zim-mcp index` runs
+//! first, as `library add` would; it builds nothing for this fixture.
 //! `UPDATE_GOLDEN=1 cargo test --test golden` rewrites the files.
 
 use std::path::{Path, PathBuf};

@@ -180,7 +180,9 @@ pub fn local_md(dir: &Path) -> Result<String, String> {
         .iter()
         .map(|a| {
             let size = a.path.metadata().map_or(0, |m| m.len());
+            let embedded = zimfile::Archive::open(&a.path).is_ok_and(|z| z.has_fulltext_index());
             let index = match zimfile::search::size(&a.path) {
+                _ if embedded => "indexed".into(),
                 Some(n) => format!("index {}", library::human_size(n)),
                 None => "not indexed".into(),
             };

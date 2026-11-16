@@ -29,7 +29,8 @@ pub struct Hit {
 pub struct ArchiveInfo {
     pub name: String,
     archive: Archive,
-    /// Its full-text index, if built.
+    /// The tantivy index built beside it, for archives without an embedded
+    /// Xapian index (opened only then).
     index: Option<search::Index>,
 }
 
@@ -45,7 +46,11 @@ impl Library {
 
     pub fn open(&mut self, name: String, file: &Path) -> Result<usize, Error> {
         let archive = Archive::open(file)?;
-        let index = search::open(&archive, file);
+        let index = if archive.has_fulltext_index() {
+            None
+        } else {
+            search::open(&archive, file)
+        };
         self.archives.push(ArchiveInfo {
             name,
             archive,
@@ -70,9 +75,9 @@ impl Library {
     pub fn entry_count(&self, a: usize) -> u32 {
         self.a(a).entry_count()
     }
-    /// Whether the archive has a (valid) full-text index.
+    /// Whether the archive has a (valid) full-text index: embedded, or built.
     pub fn has_fulltext(&self, a: usize) -> bool {
-        self.archives[a].index.is_some()
+        self.a(a).has_fulltext_index() || self.archives[a].index.is_some()
     }
 
     fn info(&self, a: usize, e: zimfile::Entry) -> Result<EntryInfo, Error> {
@@ -107,9 +112,24 @@ impl Library {
         archive.content(&e)
     }
 
-    /// Full-text search of one archive's index (none: no hits).
+    /// Full-text search of one archive: its embedded Xapian index (ranked as
+    /// Kiwix does), else its built index (none: no hits).
     pub fn fulltext_search(&self, a: usize, query: &str, limit: u32) -> Result<Vec<Hit>, Error> {
         let info = &self.archives[a];
+        if info.archive.has_fulltext_index() {
+            let mut hits = vec![];
+            for h in info.archive.search(query, limit as usize)? {
+                let html = info.archive.content(&h.entry).unwrap_or_default();
+                hits.push(Hit {
+                    archive: a,
+                    snippet: zimfile::snippet(&String::from_utf8_lossy(&html), query),
+                    path: h.entry.path,
+                    title: h.entry.title,
+                    score: h.score as f32,
+                });
+            }
+            return Ok(hits);
+        }
         let Some(index) = &info.index else {
             return Ok(vec![]);
         };
@@ -126,7 +146,8 @@ impl Library {
             .collect())
     }
 
-    /// Entries whose title starts with `query` (case-sensitive, as libzim without Xapian).
+    /// Title suggestions: the embedded title index as Kiwix ranks them, else
+    /// entries whose title starts with `query` (case-sensitive).
     pub fn suggest(&self, a: usize, query: &str, limit: u32) -> Vec<Hit> {
         self.a(a)
             .suggest(query, limit as usize)

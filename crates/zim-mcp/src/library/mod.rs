@@ -58,11 +58,11 @@ pub fn delete_archive(path: &Path) -> std::io::Result<()> {
 }
 
 /// Build the archive's full-text index (in the folder's hidden `.zimfile/`)
-/// unless a valid one exists.
+/// unless it has one embedded or a valid one exists.
 pub fn index(path: &Path, show_progress: bool) -> Result<(), String> {
     let err = |e: zimfile::Error| format!("{}: {e}", path.display());
     let archive = zimfile::Archive::open(path).map_err(err)?;
-    if zimfile::search::open(&archive, path).is_some() {
+    if archive.has_fulltext_index() || zimfile::search::open(&archive, path).is_some() {
         return Ok(());
     }
     let bar = show_progress.then(|| {
