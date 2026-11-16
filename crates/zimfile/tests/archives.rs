@@ -518,3 +518,96 @@ fn illustration() {
         }
     }
 }
+
+/// libzim test/archive.cpp:858 checkEquivalence.
+fn check_equivalence(a: &Archive, b: &Archive) {
+    assert_eq!(a.file_size(), b.file_size());
+    assert_eq!(a.header().cluster_count, b.header().cluster_count);
+    assert_eq!(a.entry_count(), b.entry_count());
+    assert_ne!(a.entry_count(), 0);
+    assert_eq!(a.main_entry().unwrap().title, b.main_entry().unwrap().title);
+    let (oa, ob) = (a.cluster_order().unwrap(), b.cluster_order().unwrap());
+    assert_eq!(oa, ob);
+    for &i in oa {
+        let (x, y) = (a.entry_at(i).unwrap(), b.entry_at(i).unwrap());
+        assert_eq!(x, y);
+        if !x.is_redirect() {
+            assert_eq!(a.item_size(&x).unwrap(), b.item_size(&y).unwrap());
+            assert_eq!(a.content(&x).unwrap(), b.content(&y).unwrap());
+        }
+    }
+    assert_eq!(a.by_path(), b.by_path());
+    let titles = |z: &Archive| -> Vec<u32> {
+        z.by_title()
+            .map(|t| z.entry_at_title(t).unwrap().index)
+            .collect()
+    };
+    assert_eq!(titles(a), titles(b));
+}
+
+// libzim test/archive.cpp:937 multipart
+#[test]
+fn multipart() {
+    for cat in CATEGORIES {
+        let d = data().join(cat);
+        let whole = Archive::open(&d.join("wikibooks_be_all_nopic_2017-02.zim")).unwrap();
+        let split = Archive::open(&d.join("wikibooks_be_all_nopic_2017-02_splitted.zim")).unwrap();
+        assert!(!whole.is_multipart());
+        assert!(split.is_multipart());
+        check_equivalence(&whole, &split);
+    }
+}
+
+// libzim test/archive.cpp:977 openZIMFileEmbeddedInAnotherFile,
+// :1099 getDirectAccessInformationFromEmbeddedArchive
+#[test]
+fn embedded_archive() {
+    for (p, cat) in data_files("small.zim") {
+        let normal = Archive::open(&p).unwrap();
+        let host = PathBuf::from(format!("{}.embedded", p.display()));
+        let embedded = Archive::open_parts(&[(host.clone(), 8, normal.file_size())]).unwrap();
+        check_equivalence(&normal, &embedded);
+        assert_eq!(embedded.path(), host, "{cat}");
+        assert!(embedded.verify_checksum().unwrap());
+        assert_ne!(check_direct_access(&embedded), 0, "{cat}");
+    }
+}
+
+// libzim test/archive.cpp:993 openZIMFileMultiPartEmbeddedInAnotherFile
+#[test]
+fn multipart_embedded_archive() {
+    for (p, cat) in data_files("small.zim") {
+        let normal = Archive::open(&p).unwrap();
+        let host = PathBuf::from(format!("{}.embedded.multi", p.display()));
+        let mut parts = vec![];
+        let mut left = normal.file_size();
+        let mut start = "BEGINZIMMULTIPART".len() as u64;
+        while left > 2048 {
+            parts.push((host.clone(), start, 2048));
+            start += 2048 + "NEWSECTIONZIMMULTI".len() as u64;
+            left -= 2048;
+        }
+        parts.push((host.clone(), start, left));
+        let multi = Archive::open_parts(&parts).unwrap();
+        assert!(multi.is_multipart(), "{cat}");
+        check_equivalence(&normal, &multi);
+        assert!(multi.verify_checksum().unwrap());
+        // Blobs across two parts have no direct access; the others read right.
+        check_direct_access(&multi);
+    }
+}
+
+// libzim test/archive.cpp:1024 checksumOfMultipartZim
+#[test]
+fn checksum_of_multipart_zim() {
+    let p = data().join("noTitleListingV0/small.zim");
+    let size = std::fs::metadata(&p).unwrap().len();
+    let first = 1234; // not chunk-aligned
+    let a =
+        Archive::open_parts(&[(p.clone(), 0, first), (p.clone(), first, size - first)]).unwrap();
+    assert!(a.is_multipart());
+    assert!(a.verify_checksum().unwrap());
+    // A range past the end of its file is refused.
+    assert!(Archive::open_parts(&[(p.clone(), 1, size)]).is_err());
+    assert!(Archive::open_parts(&[]).is_err());
+}
