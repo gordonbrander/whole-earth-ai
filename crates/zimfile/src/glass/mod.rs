@@ -9,6 +9,7 @@ pub mod bitstream;
 pub mod btree;
 pub mod db;
 pub mod pack;
+pub mod write;
 
 pub use btree::Source;
 pub use db::Db;
