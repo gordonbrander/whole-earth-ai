@@ -58,8 +58,12 @@ Pass `--no-library` to hide the library tools and `export`; small models do bett
 **Claude Code**
 
 ```sh
-claude mcp add wiki -- zim-mcp serve --dir ~/zim
+claude mcp add --scope user wiki -- zim-mcp serve --dir ~/zim --dir .
 ```
+
+`--dir` can be repeated: archives are read from every folder, and library
+changes (add, update, remove) go to the first. `.` is the folder you start
+Claude in, so `cd /Volumes/USB && claude` also serves the ZIM files on that drive.
 
 **Claude Desktop / LM Studio / Jan** — add to the app's MCP config
 (`claude_desktop_config.json`, LM Studio's `mcp.json`):

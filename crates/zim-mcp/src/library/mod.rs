@@ -42,9 +42,13 @@ pub fn scan(dir: &Path) -> std::io::Result<Vec<LocalArchive>> {
     Ok(out)
 }
 
-/// The newest version of each archive in `dir`.
-pub fn newest(dir: &Path) -> std::io::Result<Vec<LocalArchive>> {
-    let mut all = scan(dir)?;
+/// The newest version of each archive across `dirs`.
+pub fn newest(dirs: &[PathBuf]) -> Result<Vec<LocalArchive>, String> {
+    let mut all = vec![];
+    for dir in dirs {
+        all.extend(scan(dir).map_err(|e| format!("can't read {}: {e}", dir.display()))?);
+    }
+    all.sort_by(|a, b| (&a.name, &a.date).cmp(&(&b.name, &b.date)));
     all.reverse();
     all.dedup_by(|a, b| a.name == b.name); // keeps the first (newest) of each run
     all.reverse();
@@ -117,18 +121,35 @@ mod tests {
         ] {
             std::fs::write(dir.join(f), "").unwrap();
         }
-        let n: Vec<_> = newest(&dir)
-            .unwrap()
-            .into_iter()
-            .map(|a| (a.name, a.date))
-            .collect();
+        let names = |dirs: &[PathBuf]| -> Vec<(String, String)> {
+            newest(dirs)
+                .unwrap()
+                .into_iter()
+                .map(|a| (a.name, a.date))
+                .collect()
+        };
         assert_eq!(
-            n,
+            names(std::slice::from_ref(&dir)),
             vec![
                 ("a".into(), "2026-02".into()),
                 ("b".into(), "2026-01".into())
             ]
         );
+        // A second dir: its newer `b` wins, its `d` joins.
+        let dir2 = dir.join("more");
+        std::fs::create_dir_all(&dir2).unwrap();
+        for f in ["b_2026-05.zim", "d_2026-01.zim"] {
+            std::fs::write(dir2.join(f), "").unwrap();
+        }
+        assert_eq!(
+            names(&[dir.clone(), dir2.clone()]),
+            vec![
+                ("a".into(), "2026-02".into()),
+                ("b".into(), "2026-05".into()),
+                ("d".into(), "2026-01".into())
+            ]
+        );
+        assert!(newest(&[dir.clone(), dir.join("missing")]).is_err());
         assert_eq!(remove(&dir, "a").unwrap().len(), 2);
         assert!(remove(&dir, "a").is_err());
         std::fs::remove_dir_all(&dir).unwrap();

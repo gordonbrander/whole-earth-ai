@@ -22,7 +22,8 @@ use std::path::{Path, PathBuf};
 
 #[derive(Clone)]
 pub struct Server {
-    dir: PathBuf,
+    /// Archives are read from all of these; library changes go to the first.
+    dirs: Vec<PathBuf>,
     trust_client_approval: bool,
     tool_router: ToolRouter<Server>,
 }
@@ -178,10 +179,15 @@ impl Server {
         }
     }
 
+    /// The library folder: the first --dir.
+    fn dir(&self) -> &Path {
+        &self.dirs[0]
+    }
+
     fn cli(&self, args: &str) -> String {
         format!(
             "zim-mcp library {args} --dir {:?}",
-            self.dir.display().to_string()
+            self.dir().display().to_string()
         )
     }
 }
@@ -193,10 +199,10 @@ impl Server {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn search(&self, Parameters(a): Parameters<SearchArgs>) -> CallToolResult {
-        let dir = self.dir.clone();
+        let dirs = self.dirs.clone();
         done(
             blocking(move || {
-                tools::search(&dir, &a.query, a.archive.as_deref(), a.limit.unwrap_or(5))
+                tools::search(&dirs, &a.query, a.archive.as_deref(), a.limit.unwrap_or(5))
                     .map(|h| tools::hits_md(&h))
             })
             .await,
@@ -208,10 +214,10 @@ impl Server {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn read(&self, Parameters(a): Parameters<ReadArgs>) -> CallToolResult {
-        let dir = self.dir.clone();
+        let dirs = self.dirs.clone();
         done(
             blocking(move || {
-                tools::read(&dir, &a.id, a.page.unwrap_or(1), a.section.as_deref())
+                tools::read(&dirs, &a.id, a.page.unwrap_or(1), a.section.as_deref())
                     .map(|r| tools::article_md(&r))
             })
             .await,
@@ -223,8 +229,8 @@ impl Server {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn list_archives(&self) -> CallToolResult {
-        let dir = self.dir.clone();
-        done(blocking(move || tools::list_archives(&dir).map(|l| tools::archives_md(&l))).await)
+        let dirs = self.dirs.clone();
+        done(blocking(move || tools::list_archives(&dirs).map(|l| tools::archives_md(&l))).await)
     }
 }
 
@@ -254,8 +260,7 @@ impl Server {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn library_list(&self) -> CallToolResult {
-        let dir = self.dir.clone();
-        done(crate::cli::local_md(&dir))
+        done(crate::cli::local_md(self.dir()))
     }
 
     #[tool(
@@ -263,7 +268,7 @@ impl Server {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn library_status(&self) -> CallToolResult {
-        done(download::status(&self.dir).map(|s| download::status_md(&s)))
+        done(download::status(self.dir()).map(|s| download::status_md(&s)))
     }
 
     #[tool(
@@ -281,14 +286,14 @@ impl Server {
         RequestState(state): RequestState,
         InputResponses(responses): InputResponses,
     ) -> Result<CallToolResponse, ErrorData> {
-        let dir = self.dir.clone();
+        let dir = self.dir().to_path_buf();
         let name = a.name.clone();
         let plan = match blocking(move || download::plan(&dir, &name)).await {
             Ok(p) => p,
             Err(e) => return Ok(fail(e).into()),
         };
         if plan.already_present {
-            return Ok(text(plan.describe(&self.dir)).into());
+            return Ok(text(plan.describe(self.dir())).into());
         }
         self.run_approved(
             &ctx,
@@ -315,7 +320,7 @@ impl Server {
         RequestState(state): RequestState,
         InputResponses(responses): InputResponses,
     ) -> Result<CallToolResponse, ErrorData> {
-        let dir = self.dir.clone();
+        let dir = self.dir().to_path_buf();
         let names = a.names.clone();
         let plans = match blocking(move || download::plan_update(&dir, &names)).await {
             Ok(p) => p,
@@ -349,7 +354,7 @@ impl Server {
         RequestState(state): RequestState,
         InputResponses(responses): InputResponses,
     ) -> Result<CallToolResponse, ErrorData> {
-        let files: Vec<String> = library::scan(&self.dir)
+        let files: Vec<String> = library::scan(self.dir())
             .unwrap_or_default()
             .into_iter()
             .filter(|f| f.name == a.name)
@@ -365,7 +370,7 @@ impl Server {
         if files.is_empty() {
             return Ok(fail(format!("No archive named {:?}; see library_list.", a.name)).into());
         }
-        let message = format!("Delete {} from {}?", files.join(", "), self.dir.display());
+        let message = format!("Delete {} from {}?", files.join(", "), self.dir().display());
         match self
             .approve(
                 &ctx,
@@ -377,7 +382,7 @@ impl Server {
             .await
         {
             Approval::Approved => Ok(done(
-                library::remove(&self.dir, &a.name)
+                library::remove(self.dir(), &a.name)
                     .map(|f| format!("Deleted {} file(s).", f.len()))
                     .map_err(|e| e.to_string()),
             )
@@ -420,7 +425,7 @@ impl Server {
                 Err(e) => return Ok(fail(e).into()),
             }
         }
-        let newest = library::newest(&self.dir).unwrap_or_default();
+        let newest = library::newest(&self.dirs).unwrap_or_default();
         let mut jobs: Vec<(PathBuf, Vec<String>)> = vec![];
         for (name, paths) in by_archive {
             let Some(archive) = newest.iter().find(|x| x.name == name) else {
@@ -494,7 +499,7 @@ impl Server {
     ) -> Result<CallToolResponse, ErrorData> {
         let message = plans
             .iter()
-            .map(|p| p.describe(&self.dir))
+            .map(|p| p.describe(self.dir()))
             .collect::<Vec<_>>()
             .join("\n");
         match self
@@ -503,7 +508,7 @@ impl Server {
         {
             Approval::Approved => {
                 for p in &plans {
-                    if let Err(e) = download::spawn_background(&self.dir, p) {
+                    if let Err(e) = download::spawn_background(self.dir(), p) {
                         return Ok(fail(e).into());
                     }
                 }
@@ -535,13 +540,17 @@ impl ServerHandler for Server {
     }
 }
 
-pub fn serve(dir: PathBuf, no_library: bool, trust_client_approval: bool) -> Result<(), String> {
+pub fn serve(
+    dirs: Vec<PathBuf>,
+    no_library: bool,
+    trust_client_approval: bool,
+) -> Result<(), String> {
     let mut router = Server::wiki_router();
     if !no_library {
         router += Server::library_router();
     }
     let server = Server {
-        dir,
+        dirs,
         trust_client_approval,
         tool_router: router,
     };
