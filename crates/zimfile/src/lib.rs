@@ -3,10 +3,13 @@
 //!
 //! - [`Archive`] opens a `.zim` (or a split `.zimaa`, `.zimab`, …) and looks
 //!   entries up by path, index or title prefix, with libzim's rules.
+//! - [`search`] builds and queries a tantivy full-text index kept beside the
+//!   archive (`<file>.zim.idx/`).
 
 mod file;
 pub mod format;
 mod reader;
+pub mod search;
 
 pub use reader::{Archive, Entry};
 
@@ -15,6 +18,8 @@ pub enum Error {
     Io(std::io::Error),
     /// The file isn't a valid ZIM archive.
     Format(String),
+    /// From the full-text index.
+    Search(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -23,7 +28,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Error::Io(e) => e.fmt(f),
-            Error::Format(m) => f.write_str(m),
+            Error::Format(m) | Error::Search(m) => f.write_str(m),
         }
     }
 }

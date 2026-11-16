@@ -25,8 +25,8 @@ pub struct Entry {
     /// Empty for redirects.
     pub mimetype: String,
     pub redirect: Option<u32>,
-    cluster: u32,
-    blob: u32,
+    pub(crate) cluster: u32,
+    pub(crate) blob: u32,
 }
 
 impl Entry {
