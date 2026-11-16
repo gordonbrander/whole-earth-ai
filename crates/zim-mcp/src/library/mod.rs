@@ -16,7 +16,11 @@ pub struct LocalArchive {
 }
 
 /// Split `wikipedia_en_all_maxi_2026-02.zim` into `("wikipedia_en_all_maxi", "2026-02")`.
+/// Hidden files are skipped, e.g. the `._*` AppleDouble files macOS leaves on exFAT drives.
 pub fn parse_filename(file: &str) -> Option<(String, String)> {
+    if file.starts_with('.') {
+        return None;
+    }
     let stem = file.strip_suffix(".zim")?;
     if let Some((name, date)) = stem.rsplit_once('_') {
         let b = date.as_bytes();
@@ -109,6 +113,7 @@ mod tests {
             Some(("my_stuff".into(), "".into()))
         );
         assert_eq!(parse_filename("x_2026-02.zim.part"), None);
+        assert_eq!(parse_filename("._x_2026-02.zim"), None);
 
         let dir = std::env::temp_dir().join(format!("zim-mcp-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
