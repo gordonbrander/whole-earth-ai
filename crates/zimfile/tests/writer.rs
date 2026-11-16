@@ -375,10 +375,10 @@ fn title_listing_batch_boundaries() {
         }
         c.finish().unwrap();
         let a = Archive::open(&p).unwrap();
-        let fronts = a.front_articles().unwrap();
-        assert_eq!(fronts.len(), count, "{count}");
-        for (i, &e) in fronts.iter().enumerate() {
-            let e = a.entry_at(e).unwrap();
+        let by_title = a.by_title();
+        assert_eq!(by_title.len(), count, "{count}");
+        for (i, t) in by_title.enumerate() {
+            let e = a.entry_at_title(t).unwrap();
             assert_eq!(e.title, format!("title/{}", first + i));
             assert_eq!(e.path, format!("path/{}", first + count - i - 1));
         }

@@ -2,13 +2,16 @@
 //! (`fileimpl.cpp`, `archive.cpp`, `dirent_lookup.h`).
 
 use crate::file::Parts;
-use crate::format::{Cluster, Compression, Dirent, HEADER_SIZE, Header, Kind};
+use crate::format::{
+    Cluster, Compression, DELETED, Dirent, HEADER_SIZE, Header, Kind, LINKTARGET, REDIRECT,
+};
 use crate::{Error, Result};
 use md5::{Digest, Md5};
 use std::cmp::Ordering;
 use std::io::Read;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 const CACHE_CLUSTERS: usize = 16;
 const WATCHDOG: u32 = 50;
@@ -49,6 +52,8 @@ pub struct Archive {
     // ponytail: up to 16 whole decompressed clusters, memory ≈ 16 × cluster size
     // (2 MiB by default); stream blobs like libzim if that ever hurts.
     cache: Mutex<Vec<(u32, Arc<Cluster>)>>,
+    /// User entries by cluster, built on first use.
+    cluster_order: OnceLock<Vec<u32>>,
 }
 
 impl Archive {
@@ -99,6 +104,7 @@ impl Archive {
             user: (0, 0),
             titles: (0, 0, false),
             cache: Mutex::new(vec![]),
+            cluster_order: OnceLock::new(),
         };
         if a.header.cluster_count > 0 {
             let last = a.cluster_offset(a.header.cluster_count - 1)?;
@@ -591,31 +597,110 @@ impl Archive {
             .collect())
     }
 
-    /// Title suggestions without a Xapian index (`Archive::findByTitle`): the
-    /// entries in `C` (`A` in old archives) whose title starts with `query`,
-    /// compared byte for byte, in title order.
+    /// Title suggestions without a Xapian index: the first `limit` entries
+    /// of [`find_by_title`](Self::find_by_title).
     pub fn suggest(&self, query: &str, limit: usize) -> Vec<Entry> {
-        let q = query.as_bytes();
-        let Some(&last) = q.last() else {
-            return vec![];
+        self.find_by_title(query)
+            .take(limit)
+            .filter_map(|t| self.entry_at_title(t).ok())
+            .collect()
+    }
+
+    /// The entry at title-ordered position `pos` (see [`by_title`](Self::by_title)).
+    pub fn entry_at_title(&self, pos: u32) -> Result<Entry> {
+        self.entry_at(self.title_at(pos)?)
+    }
+
+    /// User entries, as entry indexes in path order (libzim's `iterByPath`).
+    pub fn by_path(&self) -> Range<u32> {
+        self.user.0..self.user.1
+    }
+
+    /// Title-ordered positions (for [`entry_at_title`](Self::entry_at_title)):
+    /// the front articles, else namespace `A` (old archives), else every user
+    /// entry (libzim's `iterByTitle`).
+    pub fn by_title(&self) -> Range<u32> {
+        if self.titles.2 {
+            0..self.titles.1
+        } else if !self.header.new_namespaces() {
+            let a = || Ok::<_, Error>(self.ns_begin(b'A')?..self.ns_begin(b'B')?);
+            a().unwrap_or(0..0)
+        } else {
+            self.by_path()
+        }
+    }
+
+    /// Entry indexes of the paths starting with `prefix`, compared byte for
+    /// byte. In old archives `prefix` is a long path (`A/Foo`); `""` and `/`
+    /// give every user entry (libzim's `findByPath`).
+    pub fn find_by_path(&self, prefix: &str) -> Range<u32> {
+        if prefix.is_empty() || prefix == "/" {
+            return self.by_path();
+        }
+        let (ns, p) = if self.header.new_namespaces() {
+            (b'C', prefix.as_bytes())
+        } else {
+            match parse_long_path(prefix.as_bytes()) {
+                Some(x) => x,
+                None => return 0..0,
+            }
+        };
+        let n = self.header.entry_count;
+        let at = |ns, k: &[u8]| self.search(ns, k, n, false).map(|r| r.1);
+        let range = || -> Result<Range<u32>> {
+            let begin = at(ns, p)?;
+            let end = match next_prefix(p) {
+                Some(next) => at(ns, &next)?,
+                None => at(ns.wrapping_add(1), b"")?, // `A/`: the whole namespace
+            };
+            Ok(begin..end.max(begin))
+        };
+        range().unwrap_or(0..0)
+    }
+
+    /// Title-ordered positions of the entries in `C` (`A` in old archives)
+    /// whose title starts with `prefix`, compared byte for byte (libzim's
+    /// `findByTitle`). Empty for an empty prefix.
+    pub fn find_by_title(&self, prefix: &str) -> Range<u32> {
+        let Some(next) = next_prefix(prefix.as_bytes()) else {
+            return 0..0;
         };
         let ns = if self.header.new_namespaces() {
             b'C'
         } else {
             b'A'
         };
-        let mut next = q.to_vec();
-        *next.last_mut().unwrap() = last.wrapping_add(1);
         let n = self.titles.1;
-        let (Ok((_, begin)), Ok((_, end))) =
-            (self.search(ns, q, n, true), self.search(ns, &next, n, true))
-        else {
-            return vec![];
-        };
-        (begin..end.max(begin))
-            .take(limit)
-            .filter_map(|t| self.entry_at(self.title_at(t).ok()?).ok())
-            .collect()
+        let at = |k: &[u8]| self.search(ns, k, n, true).map(|r| r.1);
+        match (at(prefix.as_bytes()), at(&next)) {
+            (Ok(begin), Ok(end)) => begin..end.max(begin),
+            _ => 0..0,
+        }
+    }
+
+    /// User entry indexes grouped by cluster (redirects first), path order
+    /// within a cluster: reading content in this order decompresses each
+    /// cluster once (libzim's `iterEfficient`).
+    pub fn cluster_order(&self) -> Result<&[u32]> {
+        if let Some(v) = self.cluster_order.get() {
+            return Ok(v);
+        }
+        let mut keyed = Vec::with_capacity(self.entry_count() as usize);
+        for i in self.by_path() {
+            let off = self.file.u64_at(self.header.path_ptr_pos + 8 * i as u64)?;
+            let mut mime = [0; 2];
+            self.file.read_into(&mut mime, off)?;
+            let cluster = match u16::from_le_bytes(mime) {
+                REDIRECT | LINKTARGET | DELETED => 0,
+                _ => self.file.u32_at(off + 8)?,
+            };
+            keyed.push((cluster, i));
+        }
+        keyed.sort_by_key(|&(c, _)| c); // stable: path order within a cluster
+        let _ = self
+            .cluster_order
+            .set(keyed.into_iter().map(|(_, i)| i).collect());
+        Ok(self.cluster_order.get().unwrap())
     }
 
     /// MD5 of everything before the checksum. `Ok(false)` if there's no checksum.
@@ -636,6 +721,15 @@ impl Archive {
         }
         Ok(md5.finalize().as_slice() == self.file.read(pos, 16)?)
     }
+}
+
+/// The smallest key above every key that starts with `p` (its last byte + 1,
+/// wrapping as libzim's `path.back()++`); `None` for an empty `p`.
+fn next_prefix(p: &[u8]) -> Option<Vec<u8>> {
+    let mut next = p.to_vec();
+    let last = next.last_mut()?;
+    *last = last.wrapping_add(1);
+    Some(next)
 }
 
 /// `parseLongPath`: `[/]N/rest` → (N, rest).

@@ -126,35 +126,127 @@ fn missing_file() {
     assert!(Archive::open(&data().join("nope.zim")).is_err());
 }
 
-/// libzim `test/find.cpp`: `findByTitle` is a case-sensitive byte-prefix range.
+fn wikibooks(cat: &str) -> Archive {
+    Archive::open(&data().join(cat).join("wikibooks_be_all_nopic_2017-02.zim")).unwrap()
+}
+
+const CATEGORIES: [&str; 3] = ["withns", "nons", "noTitleListingV0"];
+
+// libzim test/find.cpp:36 NotFoundByTitle, :48 NotFoundByPath
 #[test]
-fn suggestions_by_title_prefix() {
-    for cat in ["withns", "nons", "noTitleListingV0"] {
-        let a =
-            Archive::open(&data().join(cat).join("wikibooks_be_all_nopic_2017-02.zim")).unwrap();
-        assert!(a.suggest("unkownTitle", 10).is_empty());
-        assert!(a.suggest("j/body.js", 10).is_empty());
+fn not_found() {
+    for cat in CATEGORIES {
+        let a = wikibooks(cat);
+        assert!(a.find_by_title("unkownTitle").is_empty());
+        assert!(a.find_by_title("j/body.js").is_empty());
+        for p in ["unkwonPath", "U/unkwonPath", "A/unkwonPath", "X", "X/"] {
+            assert!(a.find_by_path(p).is_empty(), "{cat} {p}");
+            assert!(a.entry_by_path(p).is_none(), "{cat} {p}");
+        }
+        assert!(a.find_by_title("").is_empty());
         assert!(a.suggest("", 10).is_empty());
-        let first = a.suggest("Першая старонка", 10);
-        // Old scheme: the page and its index.html redirect; new: `W/mainPage` isn't in `C`.
-        assert_eq!(first.len(), if cat == "withns" { 2 } else { 1 }, "{cat}");
-        let u = a.suggest("Украінская", 10);
-        assert_eq!(u.len(), 5, "{cat}");
-        assert!(u.iter().all(|e| e.title.starts_with("Украінская")));
-        assert_eq!(a.suggest("Украінская", 2), u[..2]);
-        assert!(a.suggest("украінская", 10).is_empty(), "case-sensitive");
     }
 }
 
+// libzim test/find.cpp:73 ByTitle
 #[test]
-fn not_found_by_path() {
-    for cat in ["withns", "nons", "noTitleListingV0"] {
-        let a =
-            Archive::open(&data().join(cat).join("wikibooks_be_all_nopic_2017-02.zim")).unwrap();
-        for p in ["unkwonPath", "U/unkwonPath", "A/unkwonPath", "X", "X/"] {
-            assert!(a.entry_by_path(p).is_none(), "{cat} {p}");
+fn find_by_title() {
+    for cat in CATEGORIES {
+        let a = wikibooks(cat);
+        let titles = |r: &mut dyn Iterator<Item = u32>| -> Vec<String> {
+            r.map(|t| a.entry_at_title(t).unwrap().title).collect()
+        };
+        let first = titles(&mut a.find_by_title("Першая старонка"));
+        // Old scheme: the page and its index.html redirect; new: `W/mainPage` isn't in `C`.
+        assert_eq!(first.len(), if cat == "withns" { 2 } else { 1 }, "{cat}");
+        assert!(first.iter().all(|t| t.starts_with("Першая старонка")));
+        let r = a.find_by_title("Украінская");
+        let all = titles(&mut r.clone());
+        assert_eq!(all.len(), 5, "{cat}");
+        assert!(all.iter().all(|t| t.starts_with("Украінская")));
+        // libzim's EntryRange::offset(start, max) is skip(start).take(max).
+        assert_eq!(titles(&mut r.clone().take(2)), all[..2]);
+        assert_eq!(titles(&mut r.clone().skip(1).take(4)), all[1..]);
+        assert_eq!(titles(&mut r.clone().take(10)).len(), 5);
+        assert!(titles(&mut r.clone().skip(10).take(5)).is_empty());
+        assert_eq!(a.suggest("Украінская", 2), a.suggest("Украінская", 10)[..2]);
+        assert!(a.find_by_title("украінская").is_empty(), "case-sensitive");
+    }
+}
+
+// libzim test/find.cpp:183 ByPath
+#[test]
+fn find_by_path_withns() {
+    let a = wikibooks("withns");
+    for (prefix, first, count) in [
+        ("A/Main_Page.html", 5, 1),
+        ("I/s/", 78, 31),
+        ("-/j/head.js", 2, 1),
+        ("I", 75, 34),
+        ("I/", 75, 34),
+    ] {
+        let r = a.find_by_path(prefix);
+        assert_eq!((r.start, r.len()), (first, count), "{prefix}");
+        for i in r {
+            assert!(a.entry_at(i).unwrap().path.starts_with(prefix));
         }
     }
+    assert_eq!(a.find_by_path(""), 0..118);
+    assert_eq!(a.find_by_path("/"), 0..118);
+}
+
+// libzim test/find.cpp:256 ByPathNons
+#[test]
+fn find_by_path_nons() {
+    for cat in ["nons", "noTitleListingV0"] {
+        let a = wikibooks(cat);
+        for (prefix, count) in [("Першая_старонка.html", 1), ("П", 2)] {
+            let r = a.find_by_path(prefix);
+            assert_eq!(r.len(), count, "{cat} {prefix}");
+            for i in r {
+                assert!(a.entry_at(i).unwrap().path.starts_with(prefix));
+            }
+        }
+        assert_eq!(a.find_by_path(""), 0..109);
+        assert_eq!(a.find_by_path("/"), 0..109);
+    }
+}
+
+// libzim test/iterator.cpp:34 getEntryByClusterOrder, :77 IteratorTests.begin
+#[test]
+fn cluster_order() {
+    let want: Vec<u32> = (0..75).chain(109..118).chain(75..109).collect();
+    let a = wikibooks("withns");
+    assert_eq!(a.cluster_order().unwrap(), want);
+    for cat in ["nons", "noTitleListingV0"] {
+        let a = wikibooks(cat);
+        let mut got = a.cluster_order().unwrap().to_vec();
+        got.sort();
+        assert_eq!(got, a.by_path().collect::<Vec<_>>(), "{cat}: a permutation");
+    }
+}
+
+// libzim test/iterator.cpp:100 beginByTitle, :124 beginByPath
+#[test]
+fn begin_by_title_and_path() {
+    for cat in CATEGORIES {
+        let a = wikibooks(cat);
+        let want: Vec<u32> = if cat == "withns" {
+            [5].into_iter().chain(7..16).collect()
+        } else {
+            (41..51).collect()
+        };
+        let got: Vec<u32> = a
+            .by_title()
+            .take(10)
+            .map(|t| a.entry_at_title(t).unwrap().index)
+            .collect();
+        assert_eq!(got, want, "{cat}");
+    }
+    assert_eq!(
+        wikibooks("withns").by_path().take(10).collect::<Vec<_>>(),
+        (0..10).collect::<Vec<_>>()
+    );
 }
 
 /// `(path, category)` for `name` in every test-data category that has it.
@@ -227,9 +319,9 @@ fn find_main_page_by_title() {
     for (p, cat) in data_files("wikipedia_en_climate_change_mini_2024-06.zim") {
         let a = Archive::open(&p).unwrap();
         let main = a.resolve(&a.main_entry().unwrap()).unwrap();
-        let found = a.suggest(&main.title, 10);
+        let found = a.find_by_title(&main.title);
         assert_eq!(found.len(), 1, "{cat}");
-        assert_eq!(found[0].title, main.title);
+        assert_eq!(a.entry_at_title(found.start).unwrap().title, main.title);
     }
 }
 
