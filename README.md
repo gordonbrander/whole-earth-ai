@@ -1,13 +1,19 @@
 # zim-mcp
 
-Offline access to [Kiwix](https://kiwix.org) ZIM archives (Wikipedia, Wiktionary,
-Wikivoyage, Stack Exchange…) for any AI tool. One binary, three jobs:
+> Today’s version of The Whole Earth Catalog: a hard drive with a local AI and a copy of Wikipedia.  
+> – [@gordon](https://bsky.app/profile/gordon.bsky.social/post/3mznisig64c2y)
 
-- **serve** archives over MCP (stdio), with full-text search;
-- **manage** the library: browse the Kiwix catalog, download, verify, update, remove;
-- **export** articles as Markdown with attribution front matter.
+<img width="1920" height="1080" alt="poster" src="https://github.com/user-attachments/assets/632cb3ef-85f2-42df-84d0-4ba094b55434" />
 
-Works with any AI that supports MCP, (including local AIs such as Llamafile).
+**zim-mcp** lets your agent read and search zim files, the offline-first archive format from [Kiwix](https://kiwix.org). Give your agent offline access to Wikipedia, Stack Overflow, Project Gutenberg, [and much more](https://browse.library.kiwix.org/)...
+
+- **serve** offline archives over MCP (stdio), with full-text search
+- **manage** your library: search, browse, and download Kiwix's extensive catalog of offline resources
+- **export** articles as Markdown
+
+Works with any AI that supports MCP, including local AIs such like Llamafile.
+
+Create an AI archive that works anywhere and fits on a thumb drive. Build an off-grid cabin, [sail with solarpunks](https://100r.co/site/working_offgrid_efficiently.html), carry knowledge to far-away places, be prepared for emergencies, own an un-censorable AI... Access to tools!
 
 ## Install
 
