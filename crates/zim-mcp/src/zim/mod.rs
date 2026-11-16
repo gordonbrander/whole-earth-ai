@@ -2,7 +2,7 @@
 //! else addresses them by index.
 
 use std::path::Path;
-use zimfile::{Archive, search};
+use zimfile::Archive;
 
 pub type Error = zimfile::Error;
 
@@ -29,9 +29,6 @@ pub struct Hit {
 pub struct ArchiveInfo {
     pub name: String,
     archive: Archive,
-    /// The tantivy index built beside it, for archives without an embedded
-    /// Xapian index (opened only then).
-    index: Option<search::Index>,
 }
 
 /// Open ZIM archives.
@@ -46,16 +43,7 @@ impl Library {
 
     pub fn open(&mut self, name: String, file: &Path) -> Result<usize, Error> {
         let archive = Archive::open(file)?;
-        let index = if archive.has_fulltext_index() {
-            None
-        } else {
-            search::open(&archive, file)
-        };
-        self.archives.push(ArchiveInfo {
-            name,
-            archive,
-            index,
-        });
+        self.archives.push(ArchiveInfo { name, archive });
         Ok(self.archives.len() - 1)
     }
 
@@ -75,9 +63,9 @@ impl Library {
     pub fn entry_count(&self, a: usize) -> u32 {
         self.a(a).entry_count()
     }
-    /// Whether the archive has a (valid) full-text index: embedded, or built.
+    /// Whether the archive embeds a full-text index zimfile can search.
     pub fn has_fulltext(&self, a: usize) -> bool {
-        self.a(a).has_fulltext_index() || self.archives[a].index.is_some()
+        self.a(a).has_fulltext_index()
     }
 
     fn info(&self, a: usize, e: zimfile::Entry) -> Result<EntryInfo, Error> {
@@ -112,38 +100,22 @@ impl Library {
         archive.content(&e)
     }
 
-    /// Full-text search of one archive: its embedded Xapian index (ranked as
-    /// Kiwix does), else its built index (none: no hits).
+    /// Full-text search of one archive's embedded Xapian index, ranked as
+    /// Kiwix does (an error if it has none).
     pub fn fulltext_search(&self, a: usize, query: &str, limit: u32) -> Result<Vec<Hit>, Error> {
-        let info = &self.archives[a];
-        if info.archive.has_fulltext_index() {
-            let mut hits = vec![];
-            for h in info.archive.search(query, limit as usize)? {
-                let html = info.archive.content(&h.entry).unwrap_or_default();
-                hits.push(Hit {
-                    archive: a,
-                    snippet: zimfile::snippet(&String::from_utf8_lossy(&html), query),
-                    path: h.entry.path,
-                    title: h.entry.title,
-                    score: h.score as f32,
-                });
-            }
-            return Ok(hits);
-        }
-        let Some(index) = &info.index else {
-            return Ok(vec![]);
-        };
-        Ok(index
-            .search(&info.archive, query, limit as usize)?
-            .into_iter()
-            .map(|h| Hit {
+        let archive = self.a(a);
+        let mut hits = vec![];
+        for h in archive.search(query, limit as usize)? {
+            let html = archive.content(&h.entry).unwrap_or_default();
+            hits.push(Hit {
                 archive: a,
-                path: h.path,
-                title: h.title,
-                snippet: h.snippet,
-                score: h.score,
-            })
-            .collect())
+                snippet: zimfile::snippet(&String::from_utf8_lossy(&html), query),
+                path: h.entry.path,
+                title: h.entry.title,
+                score: h.score as f32,
+            });
+        }
+        Ok(hits)
     }
 
     /// Title suggestions: the embedded title index as Kiwix ranks them, else
