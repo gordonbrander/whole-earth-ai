@@ -359,7 +359,7 @@ impl Archive {
             parse_long_path(p)
                 .and_then(|(ns, short)| self.find(ns, short).ok().flatten())
                 .or_else(|| {
-                    [b'A', b'I', b'J', b'-']
+                    b"AIJ-"
                         .iter()
                         .find_map(|&ns| self.find(ns, p).ok().flatten())
                 })

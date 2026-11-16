@@ -284,19 +284,14 @@ fn library_cmd(cmd: LibraryCommand) -> Result<(), String> {
             log,
         } => {
             for spec in specs {
-                let result = download::add(&dir, &spec, replace, !log);
-                match result {
-                    Ok(path) => {
-                        if log {
-                            let _ = std::fs::remove_file(dir.join(format!(
-                                "{}.log",
-                                path.file_name().unwrap().to_string_lossy()
-                            )));
-                        }
-                        println!("{}", path.display());
-                    }
-                    Err(e) => return Err(e),
+                let path = download::add(&dir, &spec, replace, !log)?;
+                if log {
+                    let _ = std::fs::remove_file(dir.join(format!(
+                        "{}.log",
+                        path.file_name().unwrap().to_string_lossy()
+                    )));
                 }
+                println!("{}", path.display());
             }
         }
         LibraryCommand::List { dir } => {
