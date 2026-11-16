@@ -45,8 +45,7 @@ The folder *is* the library: copy ZIM files in by hand and they just work.
 Kiwix archives carry their own Xapian search indexes, and zim-mcp searches
 those directly, ranking results the way Kiwix does: no build step. The rare
 archive without one is searched by title only (`list_archives` says "titles
-only"). Earlier versions built indexes for those in a hidden `.zimfile/`
-folder; it's safe to delete.
+only").
 
 ## Use it with your AI tool
 
