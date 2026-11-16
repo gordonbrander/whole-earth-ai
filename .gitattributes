@@ -1,0 +1,2 @@
+# Golden files are compared byte for byte: no CRLF on Windows checkouts.
+**/tests/golden/** -text
