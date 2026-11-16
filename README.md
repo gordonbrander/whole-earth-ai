@@ -108,12 +108,13 @@ computer: Wikipedia, `zim-mcp`, a small local model and llamafile, with a
 double-click launcher that opens a chat page in your browser. No network, no install.
 
 ```sh
-just pin-release v0.1.0         # pin a zim-mcp release in bundle/manifest.sha256
+just pin-release v0.3.0         # pin a zim-mcp release in bundle/manifest.sha256
 just assemble /Volumes/WHOLE-EARTH
 ```
 
-`assemble` adds archives with `zim-mcp library add`, which also builds their
-search indexes, so the drive ships ready to search.
+`assemble` adds archives with `zim-mcp library add`, which downloads and checks
+them. Kiwix archives come with their search indexes, so the drive ships ready
+to search.
 
 ## License
 
