@@ -21,7 +21,9 @@ cargo install zim-mcp
 ```
 
 ZIM files are read by [`zimfile`](crates/zimfile), a pure-Rust port of
-Kiwix's libzim (reader and writer) that lives in this repository.
+Kiwix's libzim (reader and writer) that lives in this repository, and searched
+with [`zimfile-xapian`](crates/zimfile-xapian), its reimplementation of
+libzim's Xapian search indexes.
 
 ## Get some archives
 
@@ -133,6 +135,6 @@ search indexes, so the drive ships ready to search.
 
 ## License
 
-GPL-3.0-or-later, both `zim-mcp` and `zimfile` (a port of libzim, which is
-GPL-2.0-or-later). Release archives include a `SOURCE.txt` pointing to the
+GPL-3.0-or-later: `zim-mcp`, `zimfile` and `zimfile-xapian` (ports of libzim,
+which is GPL-2.0-or-later). Release archives include a `SOURCE.txt` pointing to the
 exact source.
