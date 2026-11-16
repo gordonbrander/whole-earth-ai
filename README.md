@@ -3,7 +3,7 @@
 Offline access to [Kiwix](https://kiwix.org) ZIM archives (Wikipedia, Wiktionary,
 Wikivoyage, Stack Exchange…) for any AI tool. One binary, three jobs:
 
-- **serve** archives over MCP (stdio), with full-text search through Kiwix's own libzim;
+- **serve** archives over MCP (stdio), with full-text search;
 - **manage** the library: browse the Kiwix catalog, download, verify, update, remove;
 - **export** articles as Markdown with attribution front matter.
 
@@ -12,19 +12,16 @@ Works with any AI that supports MCP, (including local AIs such as Llamafile).
 ## Install
 
 Download the archive for your OS from GitHub Releases and unpack it anywhere:
-`zim-mcp` and the libzim libraries it needs sit side by side, nothing else to install.
+one self-contained `zim-mcp` binary, nothing else to install.
 
-Or build it with Cargo, against a libzim installed on your system:
+Or build it with Cargo (pure Rust, no system libraries needed):
 
 ```sh
-# macOS (Homebrew's ICU is keg-only, so point at libzim directly)
-brew install libzim
-LIBZIM_DIR=$(brew --prefix libzim) cargo install zim-mcp
-
-# Debian / Ubuntu
-sudo apt install libzim-dev
 cargo install zim-mcp
 ```
+
+ZIM files are read by [`zimfile`](crates/zimfile), a pure-Rust port of
+Kiwix's libzim (reader and writer) that lives in this repository.
 
 ## Get some archives
 
@@ -34,12 +31,30 @@ zim-mcp library add wikipedia_en_all_nopic --dir ~/zim
 zim-mcp library list --dir ~/zim
 zim-mcp library update --dir ~/zim                   # newest versions; old files go once the new ones check out
 zim-mcp library remove wikipedia_en_all_nopic --dir ~/zim
-zim-mcp library status --dir ~/zim                   # downloads in progress
+zim-mcp library status --dir ~/zim                   # downloads and indexing in progress
 ```
 
 Downloads resume if interrupted, are checked against the sha256 Kiwix publishes,
 and only appear in the folder (as `<name>_<YYYY-MM>.zim`) once they check out.
 The folder *is* the library: copy ZIM files in by hand and they just work.
+
+### Full-text search indexes
+
+Search uses a [tantivy](https://github.com/quickwit-oss/tantivy) index kept
+next to each archive, `<file>.zim.idx/` (the Xapian index inside Kiwix archives
+is not used). `library add` and `library update` build it after the download;
+for ZIM files copied in by hand, run:
+
+```sh
+zim-mcp index --dir ~/zim            # every archive without an index
+zim-mcp index wikipedia_en_all_nopic --dir ~/zim --force   # rebuild one
+```
+
+Until an archive has its index, search matches titles only (`list_archives` says
+"titles only"). Rough cost: the 3 GB `wikipedia_en_top1m_mini` (1M articles)
+indexes in about a minute on an Apple Silicon laptop into 700 MB; full English
+Wikipedia takes proportionally longer and several GB. An interrupted build
+leaves `<file>.zim.idx.part/`, which is ignored and rebuilt.
 
 ## Use it with your AI tool
 
@@ -106,7 +121,11 @@ just pin-release v0.1.0         # pin a zim-mcp release in bundle/manifest.sha25
 just assemble /Volumes/WHOLE-EARTH
 ```
 
+`assemble` adds archives with `zim-mcp library add`, which also builds their
+search indexes, so the drive ships ready to search.
+
 ## License
 
-GPL-3.0-or-later. Release archives include libzim (GPL-2.0-or-later) and a
-`SOURCE.txt` pointing to the exact source of both.
+GPL-3.0-or-later, both `zim-mcp` and `zimfile` (a port of libzim, which is
+GPL-2.0-or-later). Release archives include a `SOURCE.txt` pointing to the
+exact source.

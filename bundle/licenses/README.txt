@@ -2,7 +2,6 @@ Licenses for everything on this drive
 =====================================
 
 zim-mcp (bin/)            GPL-3.0-or-later: GPL-3.0.txt. Source: zim-mcp-SOURCE.txt.
-                          Includes libzim (GPL-2.0-or-later) and, on Windows, ICU (Unicode license).
 llamafile.exe             Apache-2.0: llamafile-LICENSE.txt, Apache-2.0.txt.
                           Built on llama.cpp (MIT): llama.cpp-LICENSE.txt.
 models/model.gguf         Qwen3-4B-Instruct-2507 by the Qwen team (Alibaba Cloud),

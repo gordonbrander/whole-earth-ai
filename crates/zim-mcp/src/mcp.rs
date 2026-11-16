@@ -90,7 +90,7 @@ fn done(r: Result<String, String>) -> CallToolResult {
     r.map_or_else(fail, text)
 }
 
-/// Run blocking work (libzim, network) off the async runtime.
+/// Run blocking work (archive reads, indexing, network) off the async runtime.
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
     tokio::task::spawn_blocking(f)
         .await

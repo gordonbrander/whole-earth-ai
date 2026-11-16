@@ -1,6 +1,7 @@
 //! Replays `list`, `read` and `export` on the fixture archive and compares
 //! with outputs captured from the libzim build (`tests/golden/`), byte for byte.
-//! Search checks only that the expected article is in the top 5.
+//! Search checks only that the expected article is in the top 5. The fixture's
+//! full-text index is built first (`zim-mcp index`), as `library add` would.
 //! `UPDATE_GOLDEN=1 cargo test --test golden` rewrites the files.
 
 use std::path::{Path, PathBuf};
@@ -18,6 +19,10 @@ fn data_dir() -> PathBuf {
         r.any(|e| e.is_ok_and(|e| e.file_name().to_string_lossy().ends_with(".zim")))
     });
     assert!(ok, "fixture archive missing: run `just testdata`");
+    static INDEX: std::sync::Once = std::sync::Once::new();
+    INDEX.call_once(|| {
+        run(&["index", "--dir", d.to_str().unwrap()]);
+    });
     d
 }
 
@@ -89,8 +94,9 @@ fn files(root: &Path) -> Vec<PathBuf> {
 #[test]
 fn export() {
     let d = data_dir();
-    let zim = files(&d)
-        .into_iter()
+    let zim = std::fs::read_dir(&d)
+        .unwrap()
+        .map(|e| e.unwrap().path())
         .find(|p| p.extension().is_some_and(|e| e == "zim"))
         .unwrap();
     let out = std::env::temp_dir().join(format!("zim-mcp-golden-{}", std::process::id()));

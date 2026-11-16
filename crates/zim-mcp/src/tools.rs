@@ -72,30 +72,21 @@ pub fn search(
 ) -> Result<Vec<SearchHit>, String> {
     let lib = open(dir, archive)?;
     let limit = limit.clamp(1, 50);
-    // libzim searches archives together only when they share a language.
-    let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-    let mut no_index = vec![];
-    for a in 0..lib.archives.len() {
-        if lib.has_fulltext(a) {
-            groups
-                .entry(lib.metadata(a, "Language"))
-                .or_default()
-                .push(a);
-        } else {
-            no_index.push(a);
-        }
-    }
     let mut hits = vec![];
-    for archives in groups.values() {
-        match lib.fulltext_search(archives, query, limit) {
-            Ok(h) => hits.extend(h),
-            Err(_) => no_index.extend(archives), // index unreadable: fall back to titles
+    for a in 0..lib.archives.len() {
+        match lib
+            .has_fulltext(a)
+            .then(|| lib.fulltext_search(a, query, limit))
+        {
+            Some(Ok(h)) => hits.extend(h),
+            // No index (or an unreadable one): fall back to titles.
+            _ => hits.extend(lib.suggest(a, query, limit)),
         }
     }
-    for a in no_index {
-        hits.extend(lib.suggest(a, query, limit).unwrap_or_default());
-    }
-    hits.sort_by_key(|h| -h.score); // stable: title suggestions keep their order
+    // ponytail: BM25 scores from separate indexes are only roughly comparable;
+    // merging by score is good enough for a handful of archives.
+    // Stable: title suggestions (score 0) keep their order.
+    hits.sort_by(|a, b| b.score.total_cmp(&a.score));
     hits.truncate(limit as usize);
     Ok(hits
         .into_iter()

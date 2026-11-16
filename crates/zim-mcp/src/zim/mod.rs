@@ -1,133 +1,143 @@
-//! libzim binding: a cxx bridge to a small C++ shim (shim.cpp).
-//! A `Library` holds open archives; everything else addresses them by index.
+//! Open archives through zimfile. A `Library` holds open archives; everything
+//! else addresses them by index.
 
-#[cxx::bridge]
-mod ffi {
-    #[derive(Debug, Clone, Default)]
-    struct EntryInfo {
-        path: String,
-        title: String,
-        is_redirect: bool,
-        redirect_path: String,
-        mimetype: String,
-    }
+use std::path::Path;
+use zimfile::{Archive, search};
 
-    #[derive(Debug, Clone)]
-    struct Hit {
-        archive: usize,
-        path: String,
-        title: String,
-        snippet: String,
-        score: i32,
-    }
+pub type Error = zimfile::Error;
 
-    unsafe extern "C++" {
-        include!("zim-mcp/src/zim/shim.h");
-        type Library;
-        fn new_library() -> UniquePtr<Library>;
-        fn open_archive(lib: Pin<&mut Library>, path: &str) -> Result<usize>;
-        fn metadata(lib: &Library, archive: usize, name: &str) -> Result<String>;
-        fn article_count(lib: &Library, archive: usize) -> Result<u32>;
-        fn entry_count(lib: &Library, archive: usize) -> Result<u32>;
-        fn has_fulltext(lib: &Library, archive: usize) -> Result<bool>;
-        fn entry_by_path(lib: &Library, archive: usize, path: &str) -> Result<EntryInfo>;
-        fn entry_at(lib: &Library, archive: usize, index: u32) -> Result<EntryInfo>;
-        fn content(lib: &Library, archive: usize, path: &str) -> Result<Vec<u8>>;
-        fn fulltext_search(
-            lib: &Library,
-            archives: &[usize],
-            query: &str,
-            limit: u32,
-        ) -> Result<Vec<Hit>>;
-        // The parity test's oracle.
-        #[allow(dead_code)]
-        fn title_range(
-            lib: &Library,
-            archive: usize,
-            query: &str,
-            limit: u32,
-        ) -> Result<Vec<String>>;
-        #[allow(dead_code)]
-        fn has_title_index(lib: &Library, archive: usize) -> Result<bool>;
-        #[allow(dead_code)]
-        fn all_entry_count(lib: &Library, archive: usize) -> Result<u32>;
-        #[allow(dead_code)]
-        fn main_path(lib: &Library, archive: usize) -> Result<String>;
-        #[allow(dead_code)]
-        fn content_at(lib: &Library, archive: usize, index: u32) -> Result<Vec<u8>>;
-        fn suggest(lib: &Library, archive: usize, query: &str, limit: u32) -> Result<Vec<Hit>>;
-    }
+#[derive(Debug, Clone, Default)]
+pub struct EntryInfo {
+    pub path: String,
+    pub title: String,
+    pub is_redirect: bool,
+    pub redirect_path: String,
+    pub mimetype: String,
 }
 
-pub use ffi::{EntryInfo, Hit};
-
-#[cfg(test)]
-mod parity;
-use std::path::Path;
-
-pub type Error = cxx::Exception;
+#[derive(Debug, Clone)]
+pub struct Hit {
+    pub archive: usize,
+    pub path: String,
+    pub title: String,
+    pub snippet: String,
+    /// BM25 for full-text hits, 0 for title suggestions.
+    pub score: f32,
+}
 
 /// One open archive, identified by its name (filename minus `_YYYY-MM.zim`).
-#[derive(Debug, Clone)]
 pub struct ArchiveInfo {
     pub name: String,
+    archive: Archive,
+    /// Its sidecar full-text index, if built.
+    index: Option<search::Index>,
 }
 
-/// Open ZIM archives. Index `i` in `archives` is libzim archive `i`.
+/// Open ZIM archives.
 pub struct Library {
-    inner: cxx::UniquePtr<ffi::Library>,
     pub archives: Vec<ArchiveInfo>,
 }
 
 impl Library {
     pub fn new() -> Self {
-        Library {
-            inner: ffi::new_library(),
-            archives: vec![],
-        }
+        Library { archives: vec![] }
     }
 
     pub fn open(&mut self, name: String, file: &Path) -> Result<usize, Error> {
-        let i = ffi::open_archive(self.inner.pin_mut(), &file.to_string_lossy())?;
-        self.archives.push(ArchiveInfo { name });
-        Ok(i)
+        let archive = Archive::open(file)?;
+        let index = search::open(&archive, file);
+        self.archives.push(ArchiveInfo {
+            name,
+            archive,
+            index,
+        });
+        Ok(self.archives.len() - 1)
     }
 
-    fn lib(&self) -> &ffi::Library {
-        self.inner.as_ref().expect("library")
+    fn a(&self, a: usize) -> &Archive {
+        &self.archives[a].archive
     }
 
+    /// `""` when missing.
     pub fn metadata(&self, a: usize, name: &str) -> String {
-        ffi::metadata(self.lib(), a, name).unwrap_or_default()
+        let v = self.a(a).metadata(name).unwrap_or_default();
+        String::from_utf8_lossy(&v).into_owned()
     }
     pub fn article_count(&self, a: usize) -> u32 {
-        ffi::article_count(self.lib(), a).unwrap_or(0)
+        self.a(a).article_count()
     }
+    /// User entries (absolute indexes `0..entry_count` cover them).
     pub fn entry_count(&self, a: usize) -> u32 {
-        ffi::entry_count(self.lib(), a).unwrap_or(0)
+        self.a(a).entry_count()
     }
+    /// Whether the archive has a (valid) sidecar index.
     pub fn has_fulltext(&self, a: usize) -> bool {
-        ffi::has_fulltext(self.lib(), a).unwrap_or(false)
+        self.archives[a].index.is_some()
     }
+
+    fn info(&self, a: usize, e: zimfile::Entry) -> Result<EntryInfo, Error> {
+        let redirect_path = match e.redirect {
+            Some(t) => self.a(a).entry_at(t)?.path,
+            None => String::new(),
+        };
+        Ok(EntryInfo {
+            is_redirect: e.is_redirect(),
+            path: e.path,
+            title: e.title,
+            redirect_path,
+            mimetype: e.mimetype,
+        })
+    }
+
     pub fn entry(&self, a: usize, path: &str) -> Option<EntryInfo> {
-        ffi::entry_by_path(self.lib(), a, path).ok()
+        let e = self.a(a).entry_by_path(path)?;
+        self.info(a, e).ok()
     }
+    /// Entry at absolute index `index`.
     pub fn entry_at(&self, a: usize, index: u32) -> Result<EntryInfo, Error> {
-        ffi::entry_at(self.lib(), a, index)
+        let e = self.a(a).entry_at(index)?;
+        self.info(a, e)
     }
     /// Content of the entry at `path`, following redirects.
     pub fn content(&self, a: usize, path: &str) -> Result<Vec<u8>, Error> {
-        ffi::content(self.lib(), a, path)
+        let archive = self.a(a);
+        let e = archive
+            .entry_by_path(path)
+            .ok_or_else(|| Error::Format(format!("no entry {path:?}")))?;
+        archive.content(&e)
     }
-    pub fn fulltext_search(
-        &self,
-        archives: &[usize],
-        query: &str,
-        limit: u32,
-    ) -> Result<Vec<Hit>, Error> {
-        ffi::fulltext_search(self.lib(), archives, query, limit)
+
+    /// Full-text search of one archive's sidecar index (none: no hits).
+    pub fn fulltext_search(&self, a: usize, query: &str, limit: u32) -> Result<Vec<Hit>, Error> {
+        let info = &self.archives[a];
+        let Some(index) = &info.index else {
+            return Ok(vec![]);
+        };
+        Ok(index
+            .search(&info.archive, query, limit as usize)?
+            .into_iter()
+            .map(|h| Hit {
+                archive: a,
+                path: h.path,
+                title: h.title,
+                snippet: h.snippet,
+                score: h.score,
+            })
+            .collect())
     }
-    pub fn suggest(&self, a: usize, query: &str, limit: u32) -> Result<Vec<Hit>, Error> {
-        ffi::suggest(self.lib(), a, query, limit)
+
+    /// Entries whose title starts with `query` (case-sensitive, as libzim without Xapian).
+    pub fn suggest(&self, a: usize, query: &str, limit: u32) -> Vec<Hit> {
+        self.a(a)
+            .suggest(query, limit as usize)
+            .into_iter()
+            .map(|e| Hit {
+                archive: a,
+                path: e.path,
+                title: e.title,
+                snippet: String::new(),
+                score: 0.0,
+            })
+            .collect()
     }
 }

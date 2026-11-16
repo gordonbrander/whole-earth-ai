@@ -110,8 +110,9 @@ pub fn plan_update(dir: &Path, names: &[String]) -> Result<Vec<Plan>, String> {
     Ok(plans)
 }
 
-/// Download, verify and install an archive. With `replace`, delete the
-/// archive's other versions afterwards. Returns the installed path.
+/// Download, verify and install an archive, then build its full-text index.
+/// With `replace`, delete the archive's other versions afterwards. Returns the
+/// installed path.
 pub fn add(dir: &Path, spec: &str, replace: bool, show_progress: bool) -> Result<PathBuf, String> {
     fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let (m, xml) = fetch_meta4(&meta4_url(spec)?)?;
@@ -121,6 +122,7 @@ pub fn add(dir: &Path, spec: &str, replace: bool, show_progress: bool) -> Result
     } else if show_progress {
         eprintln!("{} is already present", m.file);
     }
+    super::index(&dest, show_progress)?;
     if replace {
         let (name, _) = parse_filename(&m.file).unwrap();
         for old in super::scan(dir)
@@ -128,7 +130,7 @@ pub fn add(dir: &Path, spec: &str, replace: bool, show_progress: bool) -> Result
             .into_iter()
             .filter(|a| a.name == name && a.path != dest)
         {
-            fs::remove_file(&old.path).map_err(|e| format!("{}: {e}", old.path.display()))?;
+            super::delete_archive(&old.path).map_err(|e| format!("{}: {e}", old.path.display()))?;
             if show_progress {
                 eprintln!("removed {}", old.path.display());
             }
@@ -267,6 +269,9 @@ pub struct Progress {
     pub file: String,
     pub downloaded: u64,
     pub size: u64,
+    /// Building the full-text index (`<file>.idx.part/`), not downloading.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub indexing: bool,
     /// Last line of the background download's log, if it failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -287,6 +292,16 @@ pub fn status(dir: &Path) -> Result<Vec<Progress>, String> {
         else {
             continue;
         };
+        if let Some(zim) = file.strip_suffix(".idx") {
+            out.push(Progress {
+                file: zim.to_string(),
+                downloaded: 0,
+                size: 0,
+                indexing: true,
+                error: None,
+            });
+            continue;
+        }
         if out.iter().any(|p: &Progress| p.file == file) {
             continue;
         }
@@ -307,6 +322,7 @@ pub fn status(dir: &Path) -> Result<Vec<Progress>, String> {
             file: file.to_string(),
             downloaded: part.metadata().map_or(0, |m| m.len()),
             size,
+            indexing: false,
             error,
         });
     }
@@ -320,6 +336,9 @@ pub fn status_md(list: &[Progress]) -> String {
     }
     list.iter()
         .map(|p| {
+            if p.indexing {
+                return format!("- {}: indexing for full-text search", p.file);
+            }
             let pct = if p.size > 0 {
                 p.downloaded as f64 * 100.0 / p.size as f64
             } else {

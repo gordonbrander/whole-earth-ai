@@ -286,7 +286,7 @@ pub fn section(md: &str, name: &str) -> Option<String> {
     Some(lines[start..end].join("\n"))
 }
 
-/// Remove HTML tags (libzim snippets carry `<b>` highlights).
+/// Remove HTML tags.
 pub fn strip_tags(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut in_tag = false;

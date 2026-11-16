@@ -1,6 +1,4 @@
-# zim-mcp: build and test. Needs libzim: `brew install libzim` (then
-# LIBZIM_DIR=$(brew --prefix libzim), since Homebrew's ICU is keg-only) or
-# `apt install libzim-dev`.
+# zim-mcp and zimfile: build and test (pure Rust; `just testdata` first).
 # Whole Earth drive: `just fetch`, then `just assemble /Volumes/WHOLE-EARTH`.
 
 repo := env("ZIM_MCP_REPO", "gordonbrander/zim-mcp")

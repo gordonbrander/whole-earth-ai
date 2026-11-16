@@ -1,6 +1,6 @@
 //! Export articles as Markdown files with attribution front matter.
 //! Layout: `<out>/<archive-name>/<shard>/<entry-path>.md`. Never writes to
-//! the archive (libzim opens it read-only).
+//! the archive (it is opened read-only).
 
 use crate::{library, markdown, zim};
 use std::fs;

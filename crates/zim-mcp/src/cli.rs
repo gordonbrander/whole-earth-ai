@@ -61,6 +61,16 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Build the full-text search index (`<file>.zim.idx/`) of the archives in
+    /// DIR that lack one, or only of NAME. `library add` does this already.
+    Index {
+        name: Option<String>,
+        #[arg(long, default_value = ".")]
+        dir: PathBuf,
+        /// Rebuild even if a valid index exists.
+        #[arg(long)]
+        force: bool,
+    },
     /// Manage the library: browse the Kiwix catalog, download, update, remove.
     Library {
         #[command(subcommand)]
@@ -229,6 +239,26 @@ pub fn run() -> Result<(), String> {
                 "{} articles, {} redirects written; {} already existed; {} non-articles skipped",
                 s.written, s.redirects, s.skipped_existing, s.skipped_non_article
             );
+            Ok(())
+        }
+        Command::Index { name, dir, force } => {
+            let all = library::newest(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            let chosen: Vec<_> = all
+                .into_iter()
+                .filter(|a| name.as_ref().is_none_or(|n| *n == a.name))
+                .collect();
+            if let Some(n) = &name
+                && chosen.is_empty()
+            {
+                return Err(format!("no archive named {n:?} in {}", dir.display()));
+            }
+            for a in chosen {
+                let idx = zimfile::search::sidecar_path(&a.path);
+                if force && idx.exists() {
+                    std::fs::remove_dir_all(&idx).map_err(|e| format!("{}: {e}", idx.display()))?;
+                }
+                library::index(&a.path, true)?;
+            }
             Ok(())
         }
         Command::Library { command } => library_cmd(command),
