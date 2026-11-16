@@ -16,7 +16,7 @@ mod writer;
 
 pub use format::Compression;
 pub use illustration::Illustration;
-pub use reader::{Archive, Entry};
+pub use reader::{Archive, Check, Entry, validate};
 pub use writer::{Creator, Item};
 
 #[derive(Debug)]

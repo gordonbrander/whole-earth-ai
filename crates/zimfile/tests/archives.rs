@@ -47,8 +47,8 @@ fn walk(path: &Path) -> Result<(), String> {
         }
         last = e.title;
     }
-    if !a.verify_checksum().map_err(|e| e.to_string())? {
-        return Err("checksum mismatch".into());
+    for c in zimfile::Check::ALL {
+        a.check(c).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -610,4 +610,155 @@ fn checksum_of_multipart_zim() {
     // A range past the end of its file is refused.
     assert!(Archive::open_parts(&[(p.clone(), 1, size)]).is_err());
     assert!(Archive::open_parts(&[]).is_err());
+}
+
+// libzim test/archive.cpp:702 validate
+#[test]
+fn validate() {
+    use zimfile::{Check, validate};
+    for (p, cat) in data_files("small.zim") {
+        validate(&p, &Check::ALL).unwrap_or_else(|e| panic!("{cat}: {e}"));
+    }
+    let checks: Vec<Check> = Check::ALL[1..].to_vec(); // all but the checksum
+    let all = [
+        (
+            "invalid.smaller_than_header.zim",
+            "zim-file is too small to contain a header",
+        ),
+        (
+            "invalid.outofbounds_urlptrpos.zim",
+            "Dirent pointer table outside (or not fully inside) ZIM file.",
+        ),
+        (
+            "invalid.outofbounds_clusterptrpos.zim",
+            "Cluster pointer table outside (or not fully inside) ZIM file.",
+        ),
+        ("invalid.invalid_mimelistpos.zim", "mimelistPos must be 80."),
+        (
+            "invalid.invalid_checksumpos.zim",
+            "Zim file(s) is of bad size or corrupted.",
+        ),
+        (
+            "invalid.outofbounds_first_direntptr.zim",
+            "Invalid dirent pointer",
+        ),
+        (
+            "invalid.outofbounds_last_direntptr.zim",
+            "Invalid dirent pointer",
+        ),
+        (
+            "invalid.outofbounds_first_clusterptr.zim",
+            "Invalid cluster pointer",
+        ),
+        (
+            "invalid.too_small_offset_of_first_blob_in_cluster_0.zim",
+            "Error parsing cluster. Offset of the first blob is too small.",
+        ),
+        (
+            "invalid.too_small_offset_of_first_blob_in_cluster_7.zim",
+            "Error parsing cluster. Offset of the first blob is too small.",
+        ),
+        (
+            "invalid.misaligned_offset_of_first_blob_in_cluster_9.zim",
+            "Error parsing cluster. Offset of the first blob is not properly aligned.",
+        ),
+        (
+            "invalid.misaligned_offset_of_first_blob_in_cluster_10.zim",
+            "Error parsing cluster. Offset of the first blob is not properly aligned.",
+        ),
+        (
+            "invalid.misaligned_offset_of_first_blob_in_cluster_11.zim",
+            "Error parsing cluster. Offset of the first blob is not properly aligned.",
+        ),
+        (
+            "invalid.too_large_offset_of_first_blob_in_cluster.zim",
+            "Error parsing cluster. Offset of the first blob is too large.",
+        ),
+        (
+            "invalid.offset_in_cluster.zim",
+            "Error parsing cluster. Offsets are not ordered.",
+        ),
+        ("invalid.bad_mimetype_list.zim", "Error getting mimelists."),
+    ];
+    let with_title_idx = [
+        (
+            "invalid.outofbounds_first_title_entry.zim",
+            "Invalid title index entry.",
+        ),
+        (
+            "invalid.outofbounds_last_title_entry.zim",
+            "Invalid title index entry.",
+        ),
+        (
+            "invalid.nonsorted_title_index.zim",
+            "Title index is not properly sorted.",
+        ),
+    ];
+    let mut cases: Vec<(PathBuf, &str, String)> = vec![];
+    for (name, msg) in all {
+        for (p, cat) in data_files(name) {
+            cases.push((p, cat, msg.to_string()));
+        }
+    }
+    for (name, msg) in with_title_idx {
+        for (p, cat) in data_files(name) {
+            if cat != "noTitleListingV0" {
+                cases.push((p, cat, msg.to_string()));
+            }
+        }
+    }
+    for (p, cat) in data_files("invalid.outofbounds_titleptrpos.zim") {
+        match cat {
+            "withns" => cases.push((
+                p,
+                cat,
+                "Title index table outside (or not fully inside) ZIM file.".into(),
+            )),
+            "nons" => cases.push((
+                p,
+                cat,
+                "Full Title index table outside (or not fully inside) ZIM file.".into(),
+            )),
+            _ => {}
+        }
+    }
+    for (p, cat) in data_files("invalid.nonsorted_dirent_table.zim") {
+        let msg = if cat == "withns" {
+            "Dirent table is not properly sorted:\n  #0: A/main.html\n  #1: -/favicon"
+        } else {
+            "Dirent table is not properly sorted:\n  #0: C/main.html\n  #1: C/favicon.png"
+        };
+        cases.push((p, cat, msg.into()));
+    }
+    for (p, cat) in data_files("invalid.bad_mimetype_in_dirent.zim") {
+        let entry = match cat {
+            "withns" => "M/Language",
+            "nons" => "M/Publisher",
+            _ => "M/Name",
+        };
+        cases.push((
+            p,
+            cat,
+            format!("Entry {entry} has invalid MIME-type value 1234."),
+        ));
+    }
+    assert_eq!(cases.len(), 62);
+    let mut wrong = vec![];
+    for (p, cat, want) in &cases {
+        let name = p.file_name().unwrap().to_string_lossy();
+        match validate(p, &checks) {
+            Ok(()) => wrong.push(format!("{cat}/{name}: passed, want {want:?}")),
+            Err(e) if e.to_string() != *want => {
+                wrong.push(format!("{cat}/{name}: {:?}, want {want:?}", e.to_string()))
+            }
+            Err(_) => {}
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "{} of {}:\n{}",
+        wrong.len(),
+        cases.len(),
+        wrong.join("\n")
+    );
 }

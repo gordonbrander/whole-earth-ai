@@ -40,6 +40,47 @@ impl Entry {
     }
 }
 
+/// One of libzim's integrity checks (`zim::IntegrityCheck`), in its order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Check {
+    /// The MD5 at the end matches (an archive without one fails).
+    Checksum,
+    /// Every dirent pointer points inside the archive.
+    DirentPtrs,
+    /// Dirents are sorted by long path, without duplicates.
+    DirentOrder,
+    /// The title indexes point at entries and are sorted by title.
+    TitleIndex,
+    /// Every cluster pointer points inside the archive.
+    ClusterPtrs,
+    /// Every cluster's offset table parses.
+    ClustersOffsets,
+    /// Every dirent's mimetype is in the mimetype list.
+    DirentMimetypes,
+}
+
+impl Check {
+    pub const ALL: [Check; 7] = [
+        Check::Checksum,
+        Check::DirentPtrs,
+        Check::DirentOrder,
+        Check::TitleIndex,
+        Check::ClusterPtrs,
+        Check::ClustersOffsets,
+        Check::DirentMimetypes,
+    ];
+}
+
+/// Open `path` and run `checks` in [`Check`] order: the first error, if any,
+/// with libzim's message (libzim's `zim::validate`).
+pub fn validate(path: &Path, checks: &[Check]) -> Result<()> {
+    let a = Archive::open(path)?;
+    let mut checks = checks.to_vec();
+    checks.sort();
+    checks.dedup();
+    checks.into_iter().try_for_each(|c| a.check(c))
+}
+
 pub struct Archive {
     file: Parts,
     header: Header,
@@ -742,6 +783,119 @@ impl Archive {
             .cluster_order
             .set(keyed.into_iter().map(|(_, i)| i).collect());
         Ok(self.cluster_order.get().unwrap())
+    }
+
+    /// Run one integrity check; `Err` carries libzim's message
+    /// (`FileImpl::checkIntegrity`).
+    pub fn check(&self, check: Check) -> Result<()> {
+        let fail = |m: String| Err(Error::Format(m));
+        let h = &self.header;
+        let end = if h.has_checksum() {
+            h.checksum_pos
+        } else {
+            self.file.size
+        };
+        let long_path = |d: &Dirent| {
+            let mut p = vec![d.ns, b'/'];
+            p.extend(&d.path);
+            p
+        };
+        match check {
+            Check::Checksum => {
+                if !self.verify_checksum()? {
+                    return fail("Checksum doesn't match".into());
+                }
+            }
+            Check::DirentPtrs => {
+                for i in 0..h.entry_count {
+                    let off = self.file.u64_at(h.path_ptr_pos + 8 * i as u64)?;
+                    if off < HEADER_SIZE || off.saturating_add(11) > end {
+                        return fail("Invalid dirent pointer".into());
+                    }
+                }
+            }
+            Check::DirentOrder => {
+                let mut prev: Option<Vec<u8>> = None;
+                for i in 0..h.entry_count {
+                    let p = long_path(&self.dirent(i)?);
+                    if let Some(q) = prev.filter(|q| *q >= p) {
+                        let s = |b: &[u8]| String::from_utf8_lossy(b).into_owned();
+                        return fail(format!(
+                            "Dirent table is not properly sorted:\n  #{}: {}\n  #{i}: {}",
+                            i - 1,
+                            s(&q),
+                            s(&p)
+                        ));
+                    }
+                    prev = Some(p);
+                }
+            }
+            Check::TitleIndex => {
+                if h.has_title_v0() {
+                    let n = h.entry_count as u64;
+                    if h.title_idx_pos
+                        .checked_add(4 * n)
+                        .is_none_or(|e| e > self.file.size)
+                    {
+                        return fail(
+                            "Full Title index table outside (or not fully inside) ZIM file.".into(),
+                        );
+                    }
+                    self.check_titles(h.title_idx_pos, h.entry_count)?;
+                }
+                if let Some((off, count, _)) = self.title_listing_v1()? {
+                    self.check_titles(off, count)?;
+                }
+            }
+            Check::ClusterPtrs => {
+                for i in 0..h.cluster_count {
+                    let off = self.cluster_offset(i)?;
+                    if off < HEADER_SIZE || off.saturating_add(1) > end {
+                        return fail("Invalid cluster pointer".into());
+                    }
+                }
+            }
+            Check::ClustersOffsets => {
+                for i in 0..h.cluster_count {
+                    let off = self.cluster_offset(i)?;
+                    Cluster::read_lazy(self.file.reader(off), h.entry_count as u64)?;
+                }
+            }
+            Check::DirentMimetypes => {
+                for i in 0..h.entry_count {
+                    let d = self.dirent(i)?;
+                    if let Kind::Item { mime, .. } = d.kind
+                        && mime as usize >= self.mimes.len()
+                    {
+                        return fail(format!(
+                            "Entry {} has invalid MIME-type value {mime}.",
+                            String::from_utf8_lossy(&long_path(&d))
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// A title index at `off` of `count` entry indexes: in range, and sorted
+    /// by `ns/title`.
+    fn check_titles(&self, off: u64, count: u32) -> Result<()> {
+        let mut prev: Option<Vec<u8>> = None;
+        for i in 0..count {
+            let idx = self.file.u32_at(off + 4 * i as u64)?;
+            if idx >= self.header.entry_count {
+                return Err(Error::Format("Invalid title index entry.".into()));
+            }
+            let d = self.dirent(idx)?;
+            let mut t = vec![d.ns, b'/'];
+            t.extend(d.title());
+            if prev.as_ref().is_some_and(|p| *p > t) {
+                return Err(Error::Format("Title index is not properly sorted.".into()));
+            }
+            prev = Some(t);
+        }
+        Ok(())
     }
 
     /// MD5 of everything before the checksum. `Ok(false)` if there's no checksum.

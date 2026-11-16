@@ -1,7 +1,7 @@
 //! Write archives with `Creator`, read them back with `Archive`.
 
 use std::path::{Path, PathBuf};
-use zimfile::{Archive, Compression, Creator, Illustration, Item};
+use zimfile::{Archive, Check, Compression, Creator, Illustration, Item};
 
 fn tmp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("zimfile-writer-{}", std::process::id()));
@@ -109,7 +109,9 @@ fn sample(name: &str, compression: Compression, cluster_size: usize) -> PathBuf 
 
 fn check(path: &Path, many_clusters: bool) {
     let a = Archive::open(path).unwrap();
-    assert!(a.verify_checksum().unwrap());
+    for c in Check::ALL {
+        a.check(c).unwrap_or_else(|e| panic!("{c:?}: {e}"));
+    }
     assert_eq!(a.uuid(), [7; 16]);
     assert_eq!((a.header().major, a.header().minor), (6, 3));
     assert!(a.has_front_articles_index());
