@@ -9,6 +9,7 @@ use crate::{Archive, Error, Result};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tantivy::collector::TopDocs;
+use tantivy::directory::error::{DeleteError, OpenReadError, OpenWriteError};
 use tantivy::query::QueryParser;
 use tantivy::schema::{
     Field, IndexRecordOption, STORED, STRING, Schema, TextFieldIndexing, TextOptions, Value,
@@ -201,17 +202,72 @@ pub fn open(archive: &Archive, zim: &Path) -> Option<Index> {
     if std::fs::read_to_string(dir.join("zimfile.json")).ok()? != stamp(archive) {
         return None;
     }
-    let index = tantivy::Index::open_in_dir(&dir).ok()?;
+    let dir = ReadOnly(tantivy::directory::MmapDirectory::open(&dir).ok()?);
+    let index = tantivy::Index::open(dir).ok()?;
     index.tokenizers().register(TOKENIZER, tokenizer(archive));
     let s = index.schema();
     Some(Index {
-        reader: index.reader().ok()?,
+        // Manual reload: a built index never changes.
+        reader: index
+            .reader_builder()
+            .reload_policy(tantivy::ReloadPolicy::Manual)
+            .try_into()
+            .ok()?,
         title: s.get_field("title").ok()?,
         body: s.get_field("body").ok()?,
         redirects: s.get_field("redirects").ok()?,
         path: s.get_field("path").ok()?,
         index,
     })
+}
+
+/// A built index's directory, opened without lock files: a sidecar never
+/// changes once renamed into place, and it may sit on a read-only drive.
+#[derive(Clone, Debug)]
+struct ReadOnly(tantivy::directory::MmapDirectory);
+
+impl tantivy::Directory for ReadOnly {
+    fn get_file_handle(
+        &self,
+        path: &Path,
+    ) -> std::result::Result<std::sync::Arc<dyn tantivy::directory::FileHandle>, OpenReadError>
+    {
+        self.0.get_file_handle(path)
+    }
+    fn delete(&self, path: &Path) -> std::result::Result<(), DeleteError> {
+        self.0.delete(path)
+    }
+    fn exists(&self, path: &Path) -> std::result::Result<bool, OpenReadError> {
+        self.0.exists(path)
+    }
+    fn open_write(
+        &self,
+        path: &Path,
+    ) -> std::result::Result<tantivy::directory::WritePtr, OpenWriteError> {
+        self.0.open_write(path)
+    }
+    fn atomic_read(&self, path: &Path) -> std::result::Result<Vec<u8>, OpenReadError> {
+        self.0.atomic_read(path)
+    }
+    fn atomic_write(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
+        self.0.atomic_write(path, data)
+    }
+    fn sync_directory(&self) -> std::io::Result<()> {
+        self.0.sync_directory()
+    }
+    fn watch(
+        &self,
+        cb: tantivy::directory::WatchCallback,
+    ) -> tantivy::Result<tantivy::directory::WatchHandle> {
+        self.0.watch(cb)
+    }
+    fn acquire_lock(
+        &self,
+        _lock: &tantivy::directory::Lock,
+    ) -> std::result::Result<tantivy::directory::DirectoryLock, tantivy::directory::error::LockError>
+    {
+        Ok(tantivy::directory::DirectoryLock::from(Box::new(())))
+    }
 }
 
 impl Index {

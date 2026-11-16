@@ -84,3 +84,31 @@ fn stale_and_interrupted() {
     assert!(search::open(&a, &zim).is_none());
     std::fs::remove_dir_all(zim.parent().unwrap()).unwrap();
 }
+
+/// A built index opens on a read-only drive (no lock files are created).
+#[cfg(unix)]
+#[test]
+fn read_only_index() {
+    use std::os::unix::fs::PermissionsExt;
+    let zim = scratch(&data().join("nons/small.zim"), "readonly");
+    let a = Archive::open(&zim).unwrap();
+    search::build(&a, &zim, |_, _| {}).unwrap();
+    let set = |mode| {
+        let idx = search::sidecar_path(&zim);
+        for e in std::fs::read_dir(&idx).unwrap() {
+            let p = e.unwrap().path();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(mode & 0o666)).unwrap();
+        }
+        for d in [idx.as_path(), zim.parent().unwrap()] {
+            std::fs::set_permissions(d, std::fs::Permissions::from_mode(mode)).unwrap();
+        }
+    };
+    for lock in [".tantivy-meta.lock", ".tantivy-writer.lock"] {
+        let _ = std::fs::remove_file(search::sidecar_path(&zim).join(lock));
+    }
+    set(0o555);
+    let opened = search::open(&a, &zim).map(|i| i.search(&a, "test", 5).is_ok());
+    set(0o755);
+    assert_eq!(opened, Some(true));
+    std::fs::remove_dir_all(zim.parent().unwrap()).unwrap();
+}
