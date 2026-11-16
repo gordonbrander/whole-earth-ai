@@ -419,11 +419,7 @@ impl Archive {
             return self.titles.1;
         }
         if let Some(c) = self.metadata("Counter") {
-            return parse_counter(&String::from_utf8_lossy(&c))
-                .iter()
-                .filter(|(m, _)| m.starts_with("text/html"))
-                .map(|(_, n)| n)
-                .sum();
+            return count_mime(&String::from_utf8_lossy(&c), |m| m.starts_with("text/html"));
         }
         let ns = if self.header.new_namespaces() {
             b'C'
@@ -432,6 +428,20 @@ impl Archive {
         };
         let n = || Ok::<_, Error>(self.ns_begin(ns + 1)? - self.ns_begin(ns)?);
         n().unwrap_or(0)
+    }
+
+    /// Images, videos and sounds per `M/Counter`, else the size of the `I` and
+    /// `J` namespaces (libzim's `getMediaCount`).
+    pub fn media_count(&self) -> u32 {
+        if let Some(c) = self.metadata("Counter") {
+            return count_mime(&String::from_utf8_lossy(&c), |m| {
+                ["image/", "video/", "audio/"]
+                    .iter()
+                    .any(|p| m.starts_with(p))
+            });
+        }
+        let n = |ns| Ok::<_, Error>(self.ns_begin(ns + 1)? - self.ns_begin(ns)?);
+        n(b'I').unwrap_or(0) + n(b'J').unwrap_or(0)
     }
 
     /// Path-ordered index of title-ordered position `i`.
@@ -543,31 +553,147 @@ pub(crate) fn parse_counter(s: &str) -> Vec<(String, u32)> {
     out
 }
 
+/// Sum of the `M/Counter` counts whose mimetype matches (libzim's `countMimeType`).
+fn count_mime(counter: &str, f: impl Fn(&str) -> bool) -> u32 {
+    parse_counter(counter)
+        .iter()
+        .filter(|(m, _)| f(m))
+        .map(|(_, n)| n)
+        .sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // libzim test/parseLongPath.cpp:31 invalid, :44 valid
     #[test]
     fn long_paths() {
-        assert_eq!(parse_long_path(b"A/foo"), Some((b'A', &b"foo"[..])));
-        assert_eq!(parse_long_path(b"/A/foo"), Some((b'A', &b"foo"[..])));
-        assert_eq!(parse_long_path(b"A"), Some((b'A', &b""[..])));
-        assert_eq!(parse_long_path(b"AB/x"), None);
-        assert_eq!(parse_long_path(b"/"), None);
-        assert_eq!(parse_long_path(b""), None);
+        for p in [
+            "", "AB", "AB/path", "/", "//", "/AB", "AB/", "/AB/path", "//A/path",
+        ] {
+            assert_eq!(parse_long_path(p.as_bytes()), None, "{p:?}");
+        }
+        for (p, ns, rest) in [
+            ("A/path", 'A', "path"),
+            ("A/p", 'A', "p"),
+            ("/B/path", 'B', "path"),
+            ("/B/p", 'B', "p"),
+            ("C//path", 'C', "/path"),
+            ("/C//path", 'C', "/path"),
+            ("L/path/with/separator", 'L', "path/with/separator"),
+            ("L//path/with/separator", 'L', "/path/with/separator"),
+            ("A", 'A', ""),
+            ("/A", 'A', ""),
+            ("A/", 'A', ""),
+            ("/A/", 'A', ""),
+        ] {
+            assert_eq!(
+                parse_long_path(p.as_bytes()),
+                Some((ns as u8, rest.as_bytes())),
+                "{p:?}"
+            );
+        }
     }
 
+    const BIG: &str = "application/javascript=8;text/html=3;application/warc-headers=28364;text/html;raw=true=6336;text/css=47;text/javascript=98;image/png=968;image/webp=24;application/json=3694;image/gif=10274;image/jpeg=1582;font/woff2=25;text/plain=284;application/atom+xml=247;application/x-www-form-urlencoded=9;video/mp4=9;application/x-javascript=7;application/xml=1;image/svg+xml=5";
+
+    // libzim test/counterParsing.cpp:32 simpleMimeType, :51 paramMimeType, :101 wrongType
     #[test]
     fn counter() {
+        let cases: &[(&str, &[(&str, u32)])] = &[
+            ("", &[]),
+            ("foo=1", &[("foo", 1)]),
+            ("foo=1;text/html=50;", &[("foo", 1), ("text/html", 50)]),
+            ("text/html;raw=true=1", &[("text/html;raw=true", 1)]),
+            (
+                "foo=1;text/html;raw=true=50;bar=2",
+                &[("foo", 1), ("text/html;raw=true", 50), ("bar", 2)],
+            ),
+            (
+                "foo=1;text/html;raw=true;param=value=50;bar=2",
+                &[
+                    ("foo", 1),
+                    ("text/html;raw=true;param=value", 50),
+                    ("bar", 2),
+                ],
+            ),
+            (
+                BIG,
+                &[
+                    ("application/javascript", 8),
+                    ("text/html", 3),
+                    ("application/warc-headers", 28364),
+                    ("text/html;raw=true", 6336),
+                    ("text/css", 47),
+                    ("text/javascript", 98),
+                    ("image/png", 968),
+                    ("image/webp", 24),
+                    ("application/json", 3694),
+                    ("image/gif", 10274),
+                    ("image/jpeg", 1582),
+                    ("font/woff2", 25),
+                    ("text/plain", 284),
+                    ("application/atom+xml", 247),
+                    ("application/x-www-form-urlencoded", 9),
+                    ("video/mp4", 9),
+                    ("application/x-javascript", 7),
+                    ("application/xml", 1),
+                    ("image/svg+xml", 5),
+                ],
+            ),
+            ("text/html", &[]),
+            ("text/html=", &[]),
+            ("text/html=foo", &[]),
+            ("text/html=123foo", &[]),
+            ("text/html=50;foo", &[("text/html", 50)]),
+            ("text/html;foo=20", &[]),
+            ("text/html;foo=20;", &[]),
+            ("text/html=50;;foo", &[("text/html", 50)]),
+        ];
+        for (s, want) in cases {
+            let got = parse_counter(s);
+            let got: Vec<_> = got.iter().map(|(m, n)| (m.as_str(), *n)).collect();
+            assert_eq!(got, *want, "{s:?}");
+        }
+    }
+
+    // libzim test/counterParsing.cpp:152 countMimeType
+    #[test]
+    fn counter_counts() {
+        let s = "text/html;raw=true=1";
+        assert_eq!(count_mime(s, |_| true), 1);
+        assert_eq!(count_mime(s, |_| false), 0);
+        assert_eq!(count_mime(s, |m| m.starts_with("text/html")), 1);
+        let s = "foo=1;text/html;raw=true=50;bar=2";
+        assert_eq!(count_mime(s, |_| true), 53);
+        assert_eq!(count_mime(s, |m| m.starts_with("text/html")), 50);
+        assert_eq!(count_mime(s, |m| m == "text/html"), 0);
+        assert_eq!(count_mime(s, |m| m == "text/html;raw=true"), 50);
         assert_eq!(
-            parse_counter("text/html=3;image/png=2;text/html;raw=true=4"),
-            vec![
-                ("text/html".into(), 3),
-                ("image/png".into(), 2),
-                ("text/html;raw=true".into(), 4)
-            ]
+            count_mime(s, |m| m.starts_with("text/html;raw=true;param=value")),
+            0
         );
-        assert_eq!(parse_counter(""), vec![]);
-        assert_eq!(parse_counter("a=x;b=1"), vec![("b".into(), 1)]);
+        let s = "foo=1;text/html;raw=true;param=value=50;bar=2";
+        assert_eq!(count_mime(s, |m| m == "text/html;raw=true"), 0);
+        assert_eq!(
+            count_mime(s, |m| m.starts_with("text/html;raw=true;param=value")),
+            50
+        );
+        assert_eq!(count_mime(BIG, |_| true), 51985);
+        assert_eq!(
+            count_mime(BIG, |m| m.starts_with("text/")),
+            3 + 6336 + 47 + 98 + 284
+        );
+        assert_eq!(count_mime(BIG, |m| m.starts_with("text/html")), 3 + 6336);
+        assert_eq!(
+            count_mime(BIG, |m| m.starts_with("application/")),
+            8 + 28364 + 3694 + 247 + 9 + 7 + 1
+        );
+        assert_eq!(count_mime(BIG, |m| m.contains("xml")), 247 + 1 + 5);
+        assert_eq!(
+            count_mime(BIG, |m| m.starts_with("image/") || m.starts_with("video/")),
+            968 + 24 + 10274 + 1582 + 9 + 5
+        );
     }
 }

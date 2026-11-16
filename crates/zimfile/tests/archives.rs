@@ -156,3 +156,102 @@ fn not_found_by_path() {
         }
     }
 }
+
+/// `(path, category)` for `name` in every test-data category that has it.
+fn data_files(name: &str) -> Vec<(PathBuf, &'static str)> {
+    ["withns", "nons", "noTitleListingV0"]
+        .into_iter()
+        .map(|cat| (data().join(cat).join(name), cat))
+        .filter(|(p, _)| p.exists() || p.with_extension("zimaa").exists())
+        .collect()
+}
+
+// libzim test/archive.cpp:656 articleNumber
+#[test]
+fn article_number() {
+    // name, media, then (articles, user entries, all entries) for withns, nons, noTitleListingV0.
+    type Counts = (u32, u32, u32);
+    let table: [(&str, u32, Counts, Counts, Counts); 4] = [
+        ("small.zim", 1, (1, 17, 17), (1, 2, 16), (1, 2, 16)),
+        (
+            "wikibooks_be_all_nopic_2017-02.zim",
+            34,
+            (66, 118, 118),
+            (66, 109, 123),
+            (66, 109, 123),
+        ),
+        (
+            "wikibooks_be_all_nopic_2017-02_splitted.zim",
+            34,
+            (66, 118, 118),
+            (66, 109, 123),
+            (66, 109, 123),
+        ),
+        (
+            "wikipedia_en_climate_change_mini_2024-06.zim",
+            111,
+            (3821, 20565, 20565),
+            (3821, 20551, 20568),
+            (3821, 20551, 20567),
+        ),
+    ];
+    let mut n = 0;
+    for (name, media, withns, nons, v0) in table {
+        for (p, cat) in data_files(name) {
+            let want = match cat {
+                "withns" => withns,
+                "nons" => nons,
+                _ => v0,
+            };
+            let a = Archive::open(&p).unwrap();
+            let got = (a.article_count(), a.entry_count(), a.all_entry_count());
+            assert_eq!(got, want, "{cat}/{name}");
+            assert_eq!(a.media_count(), media, "{cat}/{name}");
+            n += 1;
+        }
+    }
+    assert_eq!(n, 12);
+}
+
+// libzim test/iterator.cpp:58 getEntry.indexOutOfRange
+#[test]
+fn entry_index_out_of_range() {
+    let a = Archive::open(&data().join("withns/wikibooks_be_all_nopic_2017-02.zim")).unwrap();
+    let e = a.entry_at(a.entry_count()).unwrap_err();
+    assert_eq!(e.to_string(), "entry index out of range");
+}
+
+// libzim test/iterator.cpp:144 iteratorFunctions
+#[test]
+fn find_main_page_by_title() {
+    for (p, cat) in data_files("wikipedia_en_climate_change_mini_2024-06.zim") {
+        let a = Archive::open(&p).unwrap();
+        let main = a.resolve(&a.main_entry().unwrap()).unwrap();
+        let found = a.suggest(&main.title, 10);
+        assert_eq!(found.len(), 1, "{cat}");
+        assert_eq!(found[0].title, main.title);
+    }
+}
+
+// libzim test/archive.cpp:542 openDontFallbackOnNonSplitZimArchive,
+// :557 openNonExistantZimArchive, :571 openNonExistantZimSplitArchive
+#[test]
+fn open_errors() {
+    for (p, _) in data_files("wikibooks_be_all_nopic_2017-02.zim") {
+        let aa = PathBuf::from(format!("{}aa", p.display()));
+        let e = Archive::open(&aa).err().unwrap();
+        assert_eq!(
+            e.to_string(),
+            format!("Error opening as a split ZIM file: {}", aa.display())
+        );
+    }
+    let e = Archive::open(Path::new("non_existant.zim")).err().unwrap();
+    assert_eq!(e.to_string(), "Error opening ZIM file: non_existant.zim");
+    let e = Archive::open(Path::new("non_existant.zimaa"))
+        .err()
+        .unwrap();
+    assert_eq!(
+        e.to_string(),
+        "Error opening as a split ZIM file: non_existant.zimaa"
+    );
+}

@@ -262,3 +262,315 @@ fn empty_archive_and_unfinished() {
     drop(c);
     assert!(!path.exists() && !tmp("unfinished.zim.tmp").exists());
 }
+
+// libzim test/creator.cpp:49-70 ASSERT_ITEM_ENTRY, ASSERT_REDIRECT_ENTRY, EXPECT_MISSING_ENTRY.
+fn assert_item(a: &Archive, path: &str, title: &str, mime: &str, content: &str) {
+    let e = a
+        .entry_by_path(path)
+        .unwrap_or_else(|| panic!("{path} missing"));
+    assert!(!e.is_redirect(), "{path}");
+    assert_eq!(
+        (e.title.as_str(), e.mimetype.as_str()),
+        (title, mime),
+        "{path}"
+    );
+    assert_eq!(a.content(&e).unwrap(), content.as_bytes(), "{path}");
+}
+
+fn assert_redirect(a: &Archive, path: &str, title: &str, target: &str) {
+    let e = a
+        .entry_by_path(path)
+        .unwrap_or_else(|| panic!("{path} missing"));
+    assert_eq!(e.title, title, "{path}");
+    let t = a.entry_at(e.redirect.expect("a redirect")).unwrap();
+    assert_eq!(t.path, target, "{path}");
+}
+
+fn assert_missing(a: &Archive, path: &str) {
+    assert!(a.entry_by_path(path).is_none(), "{path} should be missing");
+}
+
+/// libzim's `makeSafeUuid`: special characters in the uuid are not special.
+fn safe_uuid() -> [u8; 16] {
+    let mut u = [0x42; 16];
+    u[5] = b'\n';
+    u[10] = 0;
+    u
+}
+
+/// A creator for test `name`, as libzim's tests set one up.
+fn creator(name: &str) -> (Creator, PathBuf) {
+    let p = tmp(name);
+    (Creator::new(&p).uuid(safe_uuid()), p)
+}
+
+/// libzim's `TestItem`: HTML, a front article.
+fn item(path: &str, title: &str, content: &str) -> Item {
+    Item::new(path, title, "text/html", content)
+}
+
+// libzim test/creator.cpp:140 createEmptyZim
+#[test]
+fn create_empty_zim() {
+    let (c, p) = creator("created_empty.zim");
+    c.finish().unwrap();
+    let a = Archive::open(&p).unwrap();
+    assert!(a.main_entry().is_none());
+    assert_eq!(a.all_entry_count(), 2); // counter + title listing
+    let counter = a.entry_at(0).unwrap();
+    assert_eq!(
+        (counter.path.as_str(), counter.mimetype.as_str()),
+        ("Counter", "text/plain")
+    );
+    let listing = a.entry_at(1).unwrap();
+    assert_eq!(
+        (listing.path.as_str(), listing.mimetype.as_str()),
+        (
+            "listing/titleOrdered/v1",
+            "application/octet-stream+zimlisting"
+        )
+    );
+    assert_eq!(a.content(&listing).unwrap(), b"");
+    // Cluster 1 (the listing's) is uncompressed and holds one blob.
+    let raw = std::fs::read(&p).unwrap();
+    let u64_at = |o: usize| u64::from_le_bytes(raw[o..o + 8].try_into().unwrap()) as usize;
+    let c1 = u64_at(a.header().cluster_ptr_pos as usize + 8);
+    assert_eq!(raw[c1], 1); // no compression
+    assert_eq!(
+        u32::from_le_bytes(raw[c1 + 1..c1 + 5].try_into().unwrap()),
+        8
+    ); // 1 blob
+}
+
+// libzim test/creator.cpp:360 titleListingProviderBatchBoundaries
+#[test]
+fn title_listing_batch_boundaries() {
+    let per_batch = 64 * 1024 / 4;
+    let first = 100000;
+    for count in [
+        0,
+        per_batch - 1,
+        per_batch,
+        per_batch + 1,
+        2 * per_batch,
+        2 * per_batch + 1,
+    ] {
+        let (mut c, p) = creator("title_listing.zim");
+        for i in 0..3 {
+            let n = first - i - 1;
+            let mut it = Item::new(
+                &format!("path/{n}"),
+                &format!("title/{n}"),
+                "text/plain",
+                "",
+            );
+            it.front = Some(false);
+            c.add_item(it).unwrap();
+        }
+        for i in 0..count {
+            // Title order is the reverse of path order.
+            let title = format!("title/{}", first + count - i - 1);
+            c.add_item(item(&format!("path/{}", first + i), &title, ""))
+                .unwrap();
+        }
+        c.finish().unwrap();
+        let a = Archive::open(&p).unwrap();
+        let fronts = a.front_articles().unwrap();
+        assert_eq!(fronts.len(), count, "{count}");
+        for (i, &e) in fronts.iter().enumerate() {
+            let e = a.entry_at(e).unwrap();
+            assert_eq!(e.title, format!("title/{}", first + i));
+            assert_eq!(e.path, format!("path/{}", first + count - i - 1));
+        }
+    }
+}
+
+// libzim test/creator.cpp:465 redirectAddedAfterItsTargetIsCreated
+#[test]
+fn redirect_added_after_its_target() {
+    let (mut c, p) = creator("redirect_after.zim");
+    c.add_item(item("item", "An item", "<html/>")).unwrap();
+    c.add_redirection("redirect", "A redirect", "item", false)
+        .unwrap();
+    c.finish().unwrap();
+    let a = Archive::open(&p).unwrap();
+    assert_item(&a, "item", "An item", "text/html", "<html/>");
+    assert_redirect(&a, "redirect", "A redirect", "item");
+}
+
+// libzim test/creator.cpp:563 attemptingToOverwriteAnItemWithAnotherItem,
+// :584 …ARedirectWithAnotherRedirect, :612 …ARedirectWithAnItem, :640 …AnItemWithARedirect
+#[test]
+fn attempting_to_overwrite() {
+    let (mut c, p) = creator("overwrite.zim");
+    c.add_item(item("path", "An item", "I tempt you")).unwrap();
+    assert!(
+        c.add_item(item("path", "Another item", "It embodies me"))
+            .is_err()
+    );
+    assert!(
+        c.add_redirection("path", "A redirect", "anotherpath", false)
+            .is_err()
+    );
+    c.add_item(item("itempath", "An item", "I tempt you"))
+        .unwrap();
+    c.add_redirection("redirectpath", "A redirect", "itempath", false)
+        .unwrap();
+    assert!(
+        c.add_redirection("redirectpath", "Another redirect", "itempath", false)
+            .is_err()
+    );
+    assert!(
+        c.add_redirection("redirectpath", "A redirect", "anotherpath", false)
+            .is_err()
+    );
+    c.add_item(item("path1", "Item#1", "I tempt you")).unwrap();
+    c.add_redirection("path2", "A redirect", "path1", false)
+        .unwrap();
+    c.add_redirection("path3", "Second level redirect", "path2", false)
+        .unwrap();
+    assert!(
+        c.add_item(item("path2", "Item#2", "I tempt you too"))
+            .is_err()
+    );
+    c.finish().unwrap();
+    let a = Archive::open(&p).unwrap();
+    assert_item(&a, "path", "An item", "text/html", "I tempt you");
+    assert_item(&a, "itempath", "An item", "text/html", "I tempt you");
+    assert_redirect(&a, "redirectpath", "A redirect", "itempath");
+    assert_item(&a, "path1", "Item#1", "text/html", "I tempt you");
+    assert_redirect(&a, "path2", "A redirect", "path1");
+    assert_redirect(&a, "path3", "Second level redirect", "path2");
+    assert_missing(&a, "anotherpath");
+}
+
+// libzim test/creator.cpp:727 handlingOfAnAscendingBlindChainOfRedirections,
+// :777 …ADescendingBlindChainOfRedirections
+#[test]
+fn blind_chains_of_redirections() {
+    for chain in [
+        ["redirectA", "redirectB", "redirectC"],
+        ["redirectC", "redirectB", "redirectA"],
+    ] {
+        let (mut c, p) = creator("blind_chain.zim");
+        c.add_item(item("1st", "1st entry in ZIM", "")).unwrap();
+        c.add_redirection(chain[0], "First", chain[1], false)
+            .unwrap();
+        c.add_redirection(chain[1], "Middle", chain[2], false)
+            .unwrap();
+        c.add_redirection(chain[2], "Last", "missingTarget", false)
+            .unwrap();
+        c.finish().unwrap();
+        let a = Archive::open(&p).unwrap();
+        for gone in ["missingTarget", "redirectA", "redirectB", "redirectC"] {
+            assert_missing(&a, gone);
+        }
+    }
+}
+
+// libzim test/creator.cpp:827 handlingOfRedirectionLoops
+#[test]
+fn redirection_loops() {
+    let (mut c, p) = creator("loops.zim");
+    for (from, to) in [
+        ("A", "B"),
+        ("B", "C"),
+        ("C", "D"),
+        ("D", "B"),
+        ("S", "S"),
+        ("Z", "Y"),
+        ("Y", "X"),
+        ("X", "W"),
+        ("W", "Y"),
+    ] {
+        let (from, to) = (format!("redirect{from}"), format!("redirect{to}"));
+        c.add_redirection(&from, &format!("{from} -> {to}"), &to, false)
+            .unwrap();
+    }
+    c.finish().unwrap();
+    let a = Archive::open(&p).unwrap();
+    for x in "ABCDSWXYZ".chars() {
+        assert_missing(&a, &format!("redirect{x}"));
+    }
+}
+
+// libzim test/creator.cpp:884 pruningOfARedirectionForest
+#[test]
+fn pruning_of_a_redirection_forest() {
+    let (mut c, p) = creator("forest.zim");
+    c.add_item(item("root", "The only item", "ROOT")).unwrap();
+    let edges = [
+        // A tree leading into a loop.
+        ("T", "N"),
+        ("M", "N"),
+        ("N", "L"),
+        ("L", "0"),
+        ("0", "O"),
+        ("O", "P"),
+        ("P", "L"),
+        // A tree ending with a dangling redirect.
+        ("A", "B"),
+        ("B", "Q"),
+        ("J", "K"),
+        ("K", "Q"),
+        ("Z", "Y"),
+        ("Y", "Q"),
+        ("Q", "(MISSING)"),
+        // The only healthy tree.
+        ("a", "b"),
+        ("b", "q"),
+        ("j", "k"),
+        ("k", "q"),
+        ("z", "y"),
+        ("y", "q"),
+        ("q", "root"),
+    ];
+    for (from, to) in edges {
+        c.add_redirection(from, &format!("{from} -> {to}"), to, false)
+            .unwrap();
+    }
+    c.finish().unwrap();
+    let a = Archive::open(&p).unwrap();
+    assert_missing(&a, "(MISSING)");
+    assert_missing(&a, "0");
+    for x in 'A'..='Z' {
+        assert_missing(&a, &x.to_string());
+    }
+    assert_item(&a, "root", "The only item", "text/html", "ROOT");
+    for (from, to) in &edges[14..] {
+        assert_redirect(&a, from, &format!("{from} -> {to}"), to);
+    }
+}
+
+/// libzim test/tools.cpp:182 createZimFromContent: `dummyPath<title>` items.
+fn zim_from_content(name: &str, contents: &[(&str, &str)]) -> Archive {
+    let (mut c, p) = creator(name);
+    for (title, content) in contents {
+        c.add_item(item(&format!("dummyPath{title}"), title, content))
+            .unwrap();
+    }
+    c.add_metadata("Title", b"This is a title", "text/plain;charset=utf-8")
+        .unwrap();
+    c.finish().unwrap();
+    Archive::open(&p).unwrap()
+}
+
+// libzim test/suggestion_iterator.cpp:127 rangeBased
+#[test]
+fn range_based_suggestions() {
+    let a = zim_from_content(
+        "range_based.zim",
+        &[
+            ("article a", "item a"),
+            ("article b", "item b"),
+            ("random c", "random c"),
+        ],
+    );
+    let s = a.suggest("article", a.entry_count() as usize);
+    assert_eq!(s.len(), 2);
+    assert_eq!(
+        (s[0].title.as_str(), s[0].path.as_str()),
+        ("article a", "dummyPatharticle a")
+    );
+    assert_eq!(s[1].title, "article b");
+}

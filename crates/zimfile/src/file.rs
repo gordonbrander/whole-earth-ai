@@ -64,9 +64,14 @@ impl Parts {
             }
         }
         if parts.is_empty() {
+            let split = if s.ends_with(".zimaa") {
+                "as a split "
+            } else {
+                ""
+            };
             return Err(Error::Io(io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("can't open ZIM file {}", path.display()),
+                format!("Error opening {split}ZIM file: {}", path.display()),
             )));
         }
         Ok(Parts { parts, size })

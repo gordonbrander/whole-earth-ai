@@ -500,4 +500,33 @@ mod tests {
         wide.extend(b"hi");
         assert_eq!(Cluster::read(&wide[..], 1).unwrap().blob(0), b"hi");
     }
+
+    // libzim test/dirent.cpp:133 read_write_article_dirent_unicode
+    #[test]
+    fn dirent_unicode() {
+        let d = Dirent {
+            kind: Kind::Item {
+                mime: 17,
+                cluster: 45,
+                blob: 1,
+            },
+            ns: b'C',
+            path: "Lüliang".as_bytes().to_vec(),
+            title: vec![],
+        };
+        let mut b = vec![];
+        d.encode(&mut b);
+        let p = Dirent::parse(&b).unwrap().unwrap();
+        assert_eq!(p, d);
+        assert_eq!((p.ns, p.title()), (b'C', "Lüliang".as_bytes()));
+    }
+
+    // libzim test/cluster.cpp:124 read_write_empty
+    #[test]
+    fn cluster_of_empty_blobs() {
+        let c = Cluster::read(&raw(&[16, 16, 16, 16], b"")[..], 10).unwrap();
+        assert_eq!(c.compression, Compression::None);
+        assert_eq!(c.count(), 3);
+        assert!((0..3).all(|i| c.blob(i).is_empty()));
+    }
 }
