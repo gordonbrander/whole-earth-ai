@@ -9,7 +9,7 @@
 // ponytail: no brackets, field prefixes or boolean keywords; port them from
 // the lemony grammar when a real (lowercase) query parses differently.
 
-use super::text::{Infix, Stemmer, infix, is_digit, is_unbroken, is_wordchar, lower, should_stem};
+use crate::text::{Infix, Stemmer, infix, is_digit, is_unbroken, is_wordchar, lower, should_stem};
 
 /// A parsed query (Xapian's `Query` tree, the operators libzim's queries produce).
 #[derive(Debug, Clone, PartialEq)]
@@ -460,7 +460,7 @@ pub fn suggestion(
     let mut v = vec![main];
     v.extend(phrase(q));
     let first = Query::Or(v);
-    Some(match phrase(&format!("{}{q}", super::index::ANCHOR)) {
+    Some(match phrase(&format!("{}{q}", crate::index::ANCHOR)) {
         Some(a) => Query::Or(vec![first, a]),
         None => first,
     })
@@ -487,7 +487,7 @@ pub fn fulltext(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::xsearch::text::stemmer;
+    use crate::text::stemmer;
     use Query::*;
 
     fn t(s: &str, p: u32) -> Query {

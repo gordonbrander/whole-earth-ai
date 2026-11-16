@@ -2,9 +2,9 @@
 //! `xapianWorker.cpp`): terms, wdfs and positions as Xapian 1.4's term
 //! generator makes them.
 
-use super::html;
-use super::text::{Stemmer, parse_terms, remove_accents, should_stem};
 use crate::glass::write::{Builder, Terms};
+use crate::html;
+use crate::text::{Stemmer, parse_terms, remove_accents, should_stem};
 
 /// libzim's `ANCHOR_TERM`: every title starts with it, so a phrase can be
 /// anchored to the start.
@@ -192,14 +192,13 @@ pub fn count_words(text: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Archive;
-    use crate::xsearch::text::stemmer;
+    use crate::testdata::{Archive, archives, index};
+    use crate::text::stemmer;
     use std::collections::BTreeMap;
-    use std::path::PathBuf;
 
     /// The climate archive's title index, inverted: (path, terms) by docid − 1.
     fn real_title_docs(a: &Archive) -> Vec<(String, Terms)> {
-        let db = a.xapian(false).unwrap();
+        let db = index(a, false);
         let mut docs: BTreeMap<u32, Terms> = BTreeMap::new();
         for (t, _) in db.terms(b"").unwrap() {
             let mut pl = db.postlist(&t).unwrap().unwrap();
@@ -218,19 +217,6 @@ mod tests {
             .collect()
     }
 
-    /// The archives with libzim-built indexes: climate (`just testdata`) and
-    /// zim-mcp's nollywood one.
-    pub fn archives() -> Vec<Archive> {
-        let d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        [
-            d.join("tests/data/nons/wikipedia_en_climate_change_mini_2024-06.zim"),
-            d.join("../zim-mcp/tests/data/wikipedia_en_nollywood_maxi_2026-10.zim"),
-        ]
-        .iter()
-        .map(|p| Archive::open(p).expect("test data missing: run `just testdata`"))
-        .collect()
-    }
-
     #[test]
     fn titles_match_libzim() {
         for a in archives() {
@@ -240,7 +226,7 @@ mod tests {
 
     fn titles_match(a: &Archive) {
         let st = stemmer("eng");
-        let db = a.xapian(false).unwrap();
+        let db = index(a, false);
         let real = real_title_docs(a);
         let mut bad = vec![];
         for (did, (path, want)) in real.iter().enumerate() {
@@ -272,7 +258,7 @@ mod tests {
     #[test]
     fn fulltext_matches_libzim() {
         for a in archives() {
-            let db = a.xapian(true).unwrap();
+            let db = index(&a, true);
             let mut real: BTreeMap<u32, BTreeMap<Vec<u8>, u32>> = BTreeMap::new();
             for (t, _) in db.terms(b"").unwrap() {
                 let mut pl = db.postlist(&t).unwrap().unwrap();
@@ -288,7 +274,7 @@ mod tests {
                 let path = String::from_utf8(db.data(did).unwrap().unwrap()).unwrap();
                 let e = a.entry_by_path(&path[2..]).unwrap();
                 let html = a.content(&e).unwrap();
-                let h = crate::xsearch::html::parse(&String::from_utf8_lossy(&html));
+                let h = crate::html::parse(&String::from_utf8_lossy(&html));
                 let got = fulltext_terms(
                     &remove_accents(&h.dump),
                     &remove_accents(&e.title),

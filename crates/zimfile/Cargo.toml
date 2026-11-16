@@ -11,14 +11,11 @@ categories = ["parser-implementations", "encoding"]
 include = ["/src/**", "/README.md", "/LICENSE"]
 
 [dependencies]
-flate2 = "1.1.11"
 getrandom = "0.4.3"
-icu_normalizer = "2.4.0"
-icu_properties = "2.4.0"
 liblzma = { version = "0.4.9", features = ["static"] }
 md-5 = "0.11.0"
-rust-stemmers = "1.2.0"
 tantivy = "0.27.0"
+zimfile-xapian = { path = "../zimfile-xapian", version = "0.1.0" }
 zstd = "0.14.4"
 
 [dev-dependencies]
