@@ -7,7 +7,6 @@
 use icu_normalizer::{ComposingNormalizerBorrowed, DecomposingNormalizerBorrowed};
 use icu_properties::CodePointMapData;
 use icu_properties::props::{GeneralCategory as GC, GeneralCategoryGroup as G};
-use std::borrow::Cow;
 
 /// libzim's `removeAccents`: the ICU transform `Lower; NFD; [:M:] remove; NFC`.
 pub fn remove_accents(s: &str) -> String {
@@ -223,59 +222,40 @@ pub fn parse_terms(
     }
 }
 
-/// A Snowball stemmer, as Xapian 1.4 has it.
-pub enum Stemmer {
-    /// Snowball 2017, which matches Xapian 1.4 (`tests/golden/xapian/README.md`).
-    Old(rust_stemmers::Stemmer),
-    // ponytail: languages rust-stemmers lacks use today's Snowball, which may
-    // stem a few words differently from Xapian 1.4; vendor 1.4's if it matters.
-    New(frostem::Stemmer),
-}
-
-impl Stemmer {
-    pub fn stem<'a>(&self, w: &'a str) -> Cow<'a, str> {
-        match self {
-            Stemmer::Old(s) => s.stem(w),
-            Stemmer::New(s) => s.stem(w),
-        }
-    }
-}
+/// A Snowball stemmer as Xapian 1.4 has it: `rust-stemmers` is Snowball
+/// 2017, which matches Xapian 1.4 (`tests/golden/xapian/README.md`).
+pub type Stemmer = rust_stemmers::Stemmer;
 
 /// The stemmer for an ISO 639-3 (or 639-1) language code, as libzim picks
 /// it (`Locale(lang).getLanguage()`, then `Xapian::Stem`); `None` when
 /// Xapian 1.4 has none.
+// ponytail: Armenian, Basque, Catalan, Indonesian, Irish, Lithuanian and
+// Nepali have Xapian 1.4 stemmers but none here, so they aren't stemmed and
+// match Kiwix's stemmed indexes poorly; generate Rust stemmers from Xapian
+// 1.4's Snowball sources if those languages matter.
 pub fn stemmer(lang: &str) -> Option<Stemmer> {
-    use frostem::Algorithm as F;
     use rust_stemmers::Algorithm as R;
-    let old = |a| Some(Stemmer::Old(rust_stemmers::Stemmer::create(a)));
-    let new = |a| Some(Stemmer::New(frostem::Stemmer::new(a)));
-    match lang.trim().to_ascii_lowercase().as_str() {
-        "en" | "eng" => old(R::English),
-        "fr" | "fra" | "fre" => old(R::French),
-        "de" | "deu" | "ger" => old(R::German),
-        "es" | "spa" => old(R::Spanish),
-        "it" | "ita" => old(R::Italian),
-        "pt" | "por" => old(R::Portuguese),
-        "ru" | "rus" => old(R::Russian),
-        "nl" | "nld" | "dut" => old(R::Dutch),
-        "sv" | "swe" => old(R::Swedish),
-        "nb" | "nn" | "no" | "nob" | "nno" | "nor" => old(R::Norwegian),
-        "da" | "dan" => old(R::Danish),
-        "fi" | "fin" => old(R::Finnish),
-        "hu" | "hun" => old(R::Hungarian),
-        "ro" | "ron" | "rum" => old(R::Romanian),
-        "tr" | "tur" => old(R::Turkish),
-        "ar" | "ara" => old(R::Arabic),
-        "ta" | "tam" => old(R::Tamil),
-        "hy" | "hye" | "arm" => new(F::Armenian),
-        "eu" | "eus" | "baq" => new(F::Basque),
-        "ca" | "cat" => new(F::Catalan),
-        "id" | "ind" => new(F::Indonesian),
-        "ga" | "gle" => new(F::Irish),
-        "lt" | "lit" => new(F::Lithuanian),
-        "ne" | "nep" => new(F::Nepali),
-        _ => None,
-    }
+    let a = match lang.trim().to_ascii_lowercase().as_str() {
+        "en" | "eng" => R::English,
+        "fr" | "fra" | "fre" => R::French,
+        "de" | "deu" | "ger" => R::German,
+        "es" | "spa" => R::Spanish,
+        "it" | "ita" => R::Italian,
+        "pt" | "por" => R::Portuguese,
+        "ru" | "rus" => R::Russian,
+        "nl" | "nld" | "dut" => R::Dutch,
+        "sv" | "swe" => R::Swedish,
+        "nb" | "nn" | "no" | "nob" | "nno" | "nor" => R::Norwegian,
+        "da" | "dan" => R::Danish,
+        "fi" | "fin" => R::Finnish,
+        "hu" | "hun" => R::Hungarian,
+        "ro" | "ron" | "rum" => R::Romanian,
+        "tr" | "tur" => R::Turkish,
+        "ar" | "ara" => R::Arabic,
+        "ta" | "tam" => R::Tamil,
+        _ => return None,
+    };
+    Some(Stemmer::create(a))
 }
 
 #[cfg(test)]
@@ -342,6 +322,6 @@ mod tests {
         assert_eq!(en.stem("international"), "intern");
         assert_eq!(en.stem("climate"), "climat");
         assert!(stemmer("xyz").is_none());
-        assert!(stemmer("cat").is_some());
+        assert!(stemmer("fra").is_some());
     }
 }

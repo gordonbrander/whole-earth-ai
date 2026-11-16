@@ -29,5 +29,6 @@ terms of both archives' title indexes (237,897 words), stemmed with Xapian
 | `frostem` 1.20260821.8 (Snowball main, 2026) | 485 (0.2%): `-ologist`, `inter-` words (`international`), `added`, `emergency`, `evening` |
 | `rust-stemmers` 1.2.0 (Snowball 2017) | **0** |
 
-So zimfile stems with `rust-stemmers`, which Xapian 1.4 matches, and falls
-back to `frostem` only for languages `rust-stemmers` lacks.
+So zimfile stems with `rust-stemmers`, which Xapian 1.4 matches. The 7
+languages it lacks (Armenian, Basque, Catalan, Indonesian, Irish, Lithuanian,
+Nepali) aren't stemmed.
