@@ -18,6 +18,7 @@ mod illustration;
 mod reader;
 pub mod search;
 mod writer;
+pub(crate) mod xsearch;
 
 pub use format::Compression;
 pub use illustration::Illustration;
