@@ -1,4 +1,4 @@
-# Whole Earth drive manifest: everything on the drive besides this repo's
+# Whole Earth AI manifest: everything on the drive besides this repo's
 # launchers and licenses. `just fetch` downloads and checks the files;
 # `just assemble <dest>` builds a drive from them.
 #

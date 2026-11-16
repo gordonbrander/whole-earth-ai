@@ -1,5 +1,5 @@
 # zim-mcp and zimfile: build and test (pure Rust; `just testdata` first).
-# Whole Earth drive: `just fetch`, then `just assemble /Volumes/WHOLE-EARTH`.
+# Whole Earth AI: `just fetch`, then `just assemble /Volumes/WHOLE-EARTH`.
 
 repo := env("ZIM_MCP_REPO", "gordonbrander/zim-mcp")
 dl := "bundle/downloads"

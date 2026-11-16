@@ -1,5 +1,5 @@
 #!/bin/sh
-# Whole Earth drive: run `sh start-linux.sh` (or double-click) to start the
+# Whole Earth AI: run `sh start-linux.sh` (or double-click) to start the
 # offline assistant on 127.0.0.1 and open the chat page. Ctrl-C to stop.
 set -e
 cd "$(dirname "$0")"

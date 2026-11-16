@@ -2,7 +2,7 @@
 
 ## TLDR
 
-Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, published on crates.io and as prebuilt binaries, that gives any AI tool offline access to Kiwix ZIM archives such as Wikipedia. It does three independent jobs: it **serves** archives over MCP (stdio), using Kiwix's own libzim for reading and full-text search; it **manages** the library (browse the Kiwix catalog, download, verify, update), from the command line or from inside a chat, where every change needs the user's approval; and it **exports** articles as Markdown. It works with whatever AI tool you already use (Claude Code, Pi, Claude Desktop, LM Studio…) and needs no local model. The **Whole Earth drive** is an optional bundle built on top of it: a drive you plug into any Mac, Windows or Linux computer that holds a full offline copy of Wikipedia, `zim-mcp`, a small local model and llamafile to run it. You double-click a launcher, a chat page opens in your browser, and the model answers from the offline library, citing the articles it read, with no network and no install. The bundle is all existing software plus launchers and a justfile that assembles the drive from a pinned manifest. `zim-mcp` knows nothing about llamafile; the bundle only configures it.
+Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, published on crates.io and as prebuilt binaries, that gives any AI tool offline access to Kiwix ZIM archives such as Wikipedia. It does three independent jobs: it **serves** archives over MCP (stdio), using Kiwix's own libzim for reading and full-text search; it **manages** the library (browse the Kiwix catalog, download, verify, update), from the command line or from inside a chat, where every change needs the user's approval; and it **exports** articles as Markdown. It works with whatever AI tool you already use (Claude Code, Pi, Claude Desktop, LM Studio…) and needs no local model. **Whole Earth AI** is an optional bundle built on top of it: a drive you plug into any Mac, Windows or Linux computer that holds a full offline copy of Wikipedia, `zim-mcp`, a small local model and llamafile to run it. You double-click a launcher, a chat page opens in your browser, and the model answers from the offline library, citing the articles it read, with no network and no install. The bundle is all existing software plus launchers and a justfile that assembles the drive from a pinned manifest. `zim-mcp` knows nothing about llamafile; the bundle only configures it.
 
 ## User stories
 
@@ -102,7 +102,7 @@ Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, publishe
 - SHOULD document one-line setup for common clients in the README (Claude Code, Pi, Claude Desktop, LM Studio). (S4, S11)
 - SHOULD sign and notarize the binaries, including the libzim dylib, so macOS and Windows don't block or warn on first run. (S1, S11)
 
-### Distribution: Whole Earth drive (optional bundle)
+### Distribution: Whole Earth AI (optional bundle)
 
 - MUST include one double-click launcher per OS that starts llamafile with the drive's model, sets up `zim-mcp` as its MCP server, and opens the chat UI in the default browser. (S1)
 - MUST use the same `zim-mcp` release archives as the standalone distribution, unmodified. (S7, S11)
@@ -120,7 +120,7 @@ Two deliverables from one repo. **`zim-mcp`** is a standalone Rust CLI, publishe
 | Deliverable | Contents | How people get it |
 |---|---|---|
 | `zim-mcp` (required) | The Rust CLI plus libzim's shared libraries | `cargo install zim-mcp` (needs libzim installed), or a per-OS archive from GitHub Releases (nothing else needed) |
-| Whole Earth drive (optional) | `zim-mcp` release archives + llamafile + model + ZIMs + launchers | Assembled with `just assemble <dest>` |
+| Whole Earth AI (optional) | `zim-mcp` release archives + llamafile + model + ZIMs + launchers | Assembled with `just assemble <dest>` |
 
 Using `zim-mcp` with your own tool:
 ```
