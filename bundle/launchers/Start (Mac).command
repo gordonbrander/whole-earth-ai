@@ -1,5 +1,5 @@
 #!/bin/bash
-# Whole Earth drive: double-click to start the offline assistant.
+# Whole Earth AI: double-click to start the offline assistant.
 # Runs llamafile with the drive's model and zim-mcp as its MCP server, on
 # 127.0.0.1 only, then opens the chat page. Close this window to stop.
 set -e

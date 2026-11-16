@@ -1,4 +1,4 @@
-# Drive smoke test: on each OS, lay out a small Whole Earth drive from the
+# Drive smoke test: on each OS, lay out a small Whole Earth AI drive from the
 # pinned zim-mcp release and llamafile, run that OS's launcher, and check
 # that a wiki tool call works through llama-server. A tiny model stands in
 # for the drive's (tool calls here don't go through the model).

@@ -111,7 +111,7 @@ YAML front matter (title, archive, path, date, source, license), and link to eac
 other with relative links, so the folder can be browsed as is. Redirects become
 short files pointing at their target. The archive is never modified.
 
-## Whole Earth drive
+## Whole Earth AI
 
 `bundle/` builds an optional drive you plug into any Mac, Windows or Linux
 computer: Wikipedia, `zim-mcp`, a small local model and llamafile, with a

@@ -1,5 +1,5 @@
 @echo off
-rem Whole Earth drive: double-click to start the offline assistant.
+rem Whole Earth AI: double-click to start the offline assistant.
 rem Runs llamafile with the drive's model and zim-mcp as its MCP server, on
 rem 127.0.0.1 only, then opens the chat page. Close this window to stop.
 setlocal
