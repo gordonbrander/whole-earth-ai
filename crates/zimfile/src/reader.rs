@@ -9,7 +9,7 @@ use crate::file::Parts;
 use crate::format::{
     Cluster, Compression, DELETED, Dirent, HEADER_SIZE, Header, Kind, LINKTARGET, REDIRECT,
 };
-use crate::{Error, Illustration, Result, glass};
+use crate::{Error, Illustration, Result};
 use md5::{Digest, Md5};
 use std::cmp::Ordering;
 use std::io::Read;
@@ -100,8 +100,8 @@ pub struct Archive {
     /// User entries by cluster, built on first use.
     cluster_order: OnceLock<Vec<u32>>,
     /// The embedded Xapian indexes, opened on first use.
-    fulltext_db: OnceLock<Option<glass::Db>>,
-    title_db: OnceLock<Option<glass::Db>>,
+    fulltext_db: OnceLock<Option<zimfile_xapian::Index>>,
+    title_db: OnceLock<Option<zimfile_xapian::Index>>,
 }
 
 impl Archive {
@@ -516,7 +516,7 @@ impl Archive {
     /// The embedded Xapian index (`X/fulltext/xapian`, or `Z//fulltextIndex/xapian`
     /// in old archives; `X/title/xapian`), if it's there, stored
     /// uncompressed in one part, and a Glass database.
-    pub(crate) fn xapian(&self, fulltext: bool) -> Option<&glass::Db> {
+    pub(crate) fn xapian(&self, fulltext: bool) -> Option<&zimfile_xapian::Index> {
         let cell = if fulltext {
             &self.fulltext_db
         } else {
@@ -536,7 +536,7 @@ impl Archive {
                 start,
                 size,
             };
-            glass::Db::open(Box::new(src)).ok()
+            zimfile_xapian::Index::open(Box::new(src)).ok()
         })
         .as_ref()
     }
@@ -1034,15 +1034,18 @@ struct Blob {
     size: u64,
 }
 
-impl glass::Source for Blob {
-    fn read_at(&self, buf: &mut [u8], off: u64) -> Result<()> {
+impl zimfile_xapian::Source for Blob {
+    fn read_at(&self, buf: &mut [u8], off: u64) -> zimfile_xapian::Result<()> {
+        use zimfile_xapian::Error as X;
         if off
             .checked_add(buf.len() as u64)
             .is_none_or(|e| e > self.size)
         {
-            return Err(Error::Format("Xapian index: read past its end".into()));
+            return Err(X::Format("Xapian index: read past its end".into()));
         }
-        self.file.read_into(buf, self.start + off)
+        self.file
+            .read_into(buf, self.start + off)
+            .map_err(|e| X::Io(std::io::Error::other(e)))
     }
 }
 

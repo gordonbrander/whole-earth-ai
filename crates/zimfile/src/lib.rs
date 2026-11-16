@@ -17,18 +17,18 @@
 
 mod file;
 pub mod format;
-pub(crate) mod glass;
 mod illustration;
 mod reader;
 pub mod search;
 mod writer;
-pub(crate) mod xsearch;
+mod xapian;
 
 pub use format::Compression;
 pub use illustration::Illustration;
 pub use reader::{Archive, Check, Entry, validate};
 pub use writer::{Content, Creator, Item};
-pub use xsearch::{SearchHit, snippet};
+pub use xapian::SearchHit;
+pub use zimfile_xapian::snippet;
 
 #[derive(Debug)]
 pub enum Error {

@@ -609,10 +609,8 @@ mod tests {
     /// slot 1 of the climate archive's fulltext index.
     #[test]
     fn word_counts_match_libzim() {
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/data/nons/wikipedia_en_climate_change_mini_2024-06.zim");
-        let a = crate::Archive::open(&path).expect("test data missing: run `just testdata`");
-        let db = a.xapian(true).unwrap();
+        let a = crate::testdata::climate();
+        let db = crate::testdata::index(&a, true);
         let mut bad = Vec::new();
         for did in 1..=db.stats.doccount {
             let path = db.data(did).unwrap().unwrap();

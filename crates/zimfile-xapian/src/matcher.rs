@@ -7,9 +7,9 @@
 // on a huge archive scores every posting; add Xapian's bounds if a measured
 // query is too slow.
 
-use super::query::Query;
 use crate::Result;
 use crate::glass::Db;
+use crate::query::Query;
 
 /// BM25 parameters (k1, k2 is always 0, k3, b, min_normlen).
 #[derive(Clone, Copy)]

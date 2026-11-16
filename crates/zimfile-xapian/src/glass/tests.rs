@@ -2,19 +2,12 @@
 //! values decoded independently with `xapian-delve`.
 
 use super::*;
-use crate::Archive;
-use std::path::PathBuf;
-
-fn climate() -> Archive {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/data/nons/wikipedia_en_climate_change_mini_2024-06.zim");
-    Archive::open(&p).expect("test data missing: run `just testdata`")
-}
+use crate::testdata::{climate, index};
 
 #[test]
 fn version_block() {
     let a = climate();
-    let ft = a.xapian(true).unwrap();
+    let ft = index(&a, true);
     assert_eq!(&ft.uuid[..4], &[0x62, 0x95, 0xd1, 0x47]);
     assert_eq!(ft.revision, 1);
     assert_eq!(ft.blocksize(), 8192);
@@ -31,7 +24,7 @@ fn version_block() {
         (s.doclen_lbound, s.doclen_ubound, s.wdf_ubound),
         (6, 1617, 105)
     );
-    let t = a.xapian(false).unwrap();
+    let t = index(&a, false);
     assert_eq!(t.stats.doccount, 3569);
     assert!(t.has_positions());
 }
@@ -39,7 +32,7 @@ fn version_block() {
 #[test]
 fn docdata_metadata_terms() {
     let a = climate();
-    let ft = a.xapian(true).unwrap();
+    let ft = index(&a, true);
     assert_eq!(
         ft.data(5).unwrap().as_deref(),
         Some(&b"C/Albert_Sustainable_Production_Certification"[..])
@@ -65,7 +58,7 @@ fn docdata_metadata_terms() {
 #[test]
 fn postlists_and_doclens() {
     let a = climate();
-    let ft = a.xapian(true).unwrap();
+    let ft = index(&a, true);
     // Every posting of "climat", walked and then skipped to.
     let mut pl = ft.postlist(b"climat").unwrap().unwrap();
     let mut all = vec![];
@@ -105,7 +98,7 @@ fn postlists_and_doclens() {
 #[test]
 fn values_and_positions() {
     let a = climate();
-    let ft = a.xapian(true).unwrap();
+    let ft = index(&a, true);
     assert_eq!(
         ft.value(5, 0).unwrap().as_deref(),
         Some(&b"albert sustainable production certification"[..])
@@ -114,7 +107,7 @@ fn values_and_positions() {
     assert!(String::from_utf8(wc).unwrap().parse::<u32>().unwrap() > 0);
     assert_eq!(ft.value(5, 9).unwrap(), None);
     assert_eq!(ft.value_stats(0).unwrap().unwrap().0, 3821);
-    let t = a.xapian(false).unwrap();
+    let t = index(&a, false);
     // "0posanchor" is at position 1 of every title document.
     for did in [1, 2, 100, 3569] {
         assert_eq!(t.positions(did, b"0posanchor").unwrap(), vec![1]);

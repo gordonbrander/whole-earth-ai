@@ -7,14 +7,13 @@
 //! dirents in path order · path pointers · cluster pointers · MD5.
 
 use crate::format::{Compression, DELETED, Dirent, HEADER_SIZE, Header, Kind};
-use crate::glass::write::Builder;
-use crate::xsearch::{index as xindex, text};
 use crate::{Error, Illustration, Result};
 use md5::{Digest, Md5};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use zimfile_xapian::IndexWriter;
 
 const CLUSTER_BASE_OFFSET: u64 = 2048;
 const DEFAULT_CLUSTER_SIZE: usize = 2 << 20;
@@ -185,12 +184,11 @@ pub struct Creator {
     index: Option<Indexing>,
 }
 
-/// The indexes being built: the language, its stemmer, the full-text index
-/// (in memory as items are added), and the temporary files at `finish`.
+/// The indexes being built: the language, the full-text index (in memory as
+/// items are added), and the temporary files at `finish`.
 struct Indexing {
     language: String,
-    stemmer: Option<text::Stemmer>,
-    fulltext: Builder,
+    fulltext: Option<IndexWriter>,
     tmp: Vec<PathBuf>,
 }
 
@@ -259,8 +257,7 @@ impl Creator {
     pub fn index(mut self, language: &str) -> Self {
         self.index = Some(Indexing {
             language: language.into(),
-            stemmer: text::stemmer(language),
-            fulltext: Builder::default(),
+            fulltext: Some(IndexWriter::fulltext(language)),
             tmp: vec![],
         });
         self
@@ -417,20 +414,14 @@ impl Creator {
         let front = item.front.unwrap_or(mime.starts_with("text/html"));
         let compress = item.compress.unwrap_or(compressible(&mime));
         let m = self.mime(&mime)?;
-        if let Some(ix) = &mut self.index
+        if let Some(w) = self.index.as_mut().and_then(|ix| ix.fulltext.as_mut())
             && mime.starts_with("text/html")
         {
             let html = match &item.content {
                 Content::Bytes(b) => String::from_utf8_lossy(b).into_owned(),
                 Content::File(p) => String::from_utf8_lossy(&std::fs::read(p)?).into_owned(),
             };
-            xindex::add_fulltext(
-                &mut ix.fulltext,
-                &item.path,
-                &item.title,
-                &html,
-                ix.stemmer.as_ref(),
-            );
+            w.add_html(&item.path, &item.title, &html);
         }
         let (cluster, blob) = self.add_data(item.content, compress)?;
         let clean = &mime[..mime.find([';', ' ', '\t']).unwrap_or(mime.len())];
@@ -759,7 +750,7 @@ impl Creator {
             return Ok(());
         };
         // Titles: the front articles in path order, as libzim's `indexTitles`.
-        let mut titles = Builder::default();
+        let mut titles = IndexWriter::title(&ix.language);
         for ((ns, path), d) in &self.dirents {
             if *ns != b'C' || !d.front {
                 continue;
@@ -774,20 +765,13 @@ impl Creator {
                 Target::Redirect(_, t) => Some(String::from_utf8_lossy(t).into_owned()),
                 _ => None,
             };
-            xindex::add_title(
-                &mut titles,
-                &path,
-                &title,
-                target.as_deref(),
-                ix.stemmer.as_ref(),
-            );
+            titles.add_title(&path, &title, target.as_deref());
         }
-        let fulltext = std::mem::take(&mut ix.fulltext);
-        for (name, mut b, is_fulltext) in [("fulltext", fulltext, true), ("title", titles, false)] {
-            if b.doccount() == 0 {
+        let fulltext = ix.fulltext.take();
+        for (name, w) in [("fulltext", fulltext), ("title", Some(titles))] {
+            let Some(w) = w.filter(|w| !w.is_empty()) else {
                 continue;
-            }
-            xindex::set_metadata(&mut b, is_fulltext, &ix.language);
+            };
             let mut tmp = self.path.as_os_str().to_owned();
             tmp.push(format!(".xapian-{name}.tmp"));
             let tmp = PathBuf::from(tmp);
@@ -795,9 +779,8 @@ impl Creator {
             let mut uuid = [0; 16];
             getrandom::fill(&mut uuid).map_err(|e| Error::Io(io::Error::other(e)))?;
             let mut f = BufWriter::new(File::create(&tmp)?);
-            b.write(&mut f, uuid)?;
+            w.write(&mut f, uuid)?;
             f.into_inner().map_err(|e| e.into_error())?.sync_all()?;
-            drop(b);
             let m = self.mime("application/octet-stream+xapian")?;
             let (cluster, blob) = self.add_data(Content::File(tmp), false)?;
             self.put(

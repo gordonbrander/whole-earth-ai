@@ -2694,16 +2694,24 @@ dependencies = [
 name = "zimfile"
 version = "0.1.0"
 dependencies = [
- "flate2",
  "getrandom 0.4.3",
- "icu_normalizer",
- "icu_properties",
  "liblzma",
  "md-5",
- "rust-stemmers",
  "sha2",
  "tantivy",
+ "zimfile-xapian",
  "zstd",
+]
+
+[[package]]
+name = "zimfile-xapian"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "icu_normalizer",
+ "icu_properties",
+ "rust-stemmers",
+ "zimfile",
 ]
 
 [[package]]
