@@ -2695,7 +2695,6 @@ name = "zimfile"
 version = "0.1.0"
 dependencies = [
  "flate2",
- "frostem",
  "getrandom 0.4.3",
  "icu_normalizer",
  "icu_properties",

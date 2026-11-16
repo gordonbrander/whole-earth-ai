@@ -12,7 +12,6 @@ include = ["/src/**", "/README.md", "/LICENSE"]
 
 [dependencies]
 flate2 = "1.1.11"
-frostem = { version = "1.20260821.8", default-features = false, features = ["armenian", "basque", "catalan", "indonesian", "irish", "lithuanian", "nepali"] }
 getrandom = "0.4.3"
 icu_normalizer = "2.4.0"
 icu_properties = "2.4.0"
