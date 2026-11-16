@@ -1,6 +1,7 @@
 //! `Creator`: write a ZIM archive that libzim reads. A port of libzim's
 //! `writer/creator.cpp` (layout, orderings, counter, title listing, redirect
-//! clean-up), single-threaded.
+//! clean-up), single-threaded. Content streams: a [`Content::File`] is read
+//! only when its cluster is written, so archives can be larger than memory.
 //!
 //! Layout: header (written last) · mime list at 80 · clusters from 2048 ·
 //! dirents in path order · path pointers · cluster pointers · MD5.
@@ -10,13 +11,82 @@ use crate::{Error, Illustration, Result};
 use md5::{Digest, Md5};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 const CLUSTER_BASE_OFFSET: u64 = 2048;
 const DEFAULT_CLUSTER_SIZE: usize = 2 << 20;
 const ZSTD_LEVEL: i32 = 19; // libzim's
 const LZMA_PRESET: u32 = 9;
+
+/// An item's bytes: in memory, or a file read when its cluster is written
+/// (libzim's `ContentProvider`). A file must keep its size until then.
+#[derive(Debug, Clone)]
+pub enum Content {
+    Bytes(Vec<u8>),
+    File(PathBuf),
+}
+
+impl Default for Content {
+    fn default() -> Content {
+        Content::Bytes(vec![])
+    }
+}
+
+impl From<Vec<u8>> for Content {
+    fn from(b: Vec<u8>) -> Content {
+        Content::Bytes(b)
+    }
+}
+impl From<&[u8]> for Content {
+    fn from(b: &[u8]) -> Content {
+        Content::Bytes(b.to_vec())
+    }
+}
+impl<const N: usize> From<&[u8; N]> for Content {
+    fn from(b: &[u8; N]) -> Content {
+        Content::Bytes(b.to_vec())
+    }
+}
+impl From<&str> for Content {
+    fn from(s: &str) -> Content {
+        Content::Bytes(s.into())
+    }
+}
+impl From<String> for Content {
+    fn from(s: String) -> Content {
+        Content::Bytes(s.into())
+    }
+}
+
+impl Content {
+    fn size(&self) -> Result<u64> {
+        Ok(match self {
+            Content::Bytes(b) => b.len() as u64,
+            Content::File(p) => std::fs::metadata(p)
+                .map_err(|e| Error::Io(io::Error::new(e.kind(), format!("{}: {e}", p.display()))))?
+                .len(),
+        })
+    }
+
+    /// Write exactly `size` bytes to `w`.
+    fn write_to(&self, w: &mut impl Write, size: u64) -> Result<()> {
+        match self {
+            Content::Bytes(b) => w.write_all(b)?,
+            Content::File(p) => {
+                let f = File::open(p)?;
+                // One byte more than declared, to notice a file that grew.
+                if io::copy(&mut f.take(size + 1), w)? != size {
+                    return Err(Error::Invalid(format!(
+                        "{}: size changed while writing",
+                        p.display()
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+}
 
 /// One content entry for [`Creator::add_item`]. `front` and `compress` are
 /// libzim's hints; `None` means the default from the mimetype.
@@ -25,7 +95,7 @@ pub struct Item {
     pub path: String,
     pub title: String,
     pub mimetype: String,
-    pub content: Vec<u8>,
+    pub content: Content,
     /// A front article: listed by title, counted in `article_count`. Default: HTML.
     pub front: Option<bool>,
     /// Put in a compressed cluster. Default: text-like mimetypes.
@@ -33,7 +103,7 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new(path: &str, title: &str, mimetype: &str, content: impl Into<Vec<u8>>) -> Item {
+    pub fn new(path: &str, title: &str, mimetype: &str, content: impl Into<Content>) -> Item {
         Item {
             path: path.into(),
             title: title.into(),
@@ -70,17 +140,22 @@ struct WDirent {
     front: bool,
 }
 
-/// A cluster being filled.
+/// A cluster being filled: its contents, unread until it's written.
+#[derive(Default)]
 struct Open {
     serial: u32,
-    data: Vec<u8>,
+    items: Vec<Content>,
+    /// Blob end offsets (declared sizes, summed).
     ends: Vec<u64>,
 }
 
 impl Open {
+    fn data_size(&self) -> u64 {
+        self.ends.last().copied().unwrap_or(0)
+    }
     fn size(&self) -> u64 {
         // libzim's estimate: offset table (incl. the leading 0) + data.
-        4 * (self.ends.len() as u64 + 1) + self.data.len() as u64
+        4 * (self.ends.len() as u64 + 1) + self.data_size()
     }
 }
 
@@ -102,6 +177,8 @@ pub struct Creator {
     closed: HashMap<u32, (u32, u64)>,
     offsets: Vec<u64>,
     counter: BTreeMap<String, u32>,
+    /// A cluster write failed: the file is unusable, every call errors.
+    failed: bool,
 }
 
 impl Creator {
@@ -120,21 +197,26 @@ impl Creator {
             dirents: BTreeMap::new(),
             mimes: vec![],
             mime_idx: HashMap::new(),
-            comp: Open {
-                serial: 0,
-                data: vec![],
-                ends: vec![],
-            },
+            comp: Open::default(),
             uncomp: Open {
                 serial: 1,
-                data: vec![],
-                ends: vec![],
+                ..Open::default()
             },
             next_serial: 2,
             closed: HashMap::new(),
             offsets: vec![],
             counter: BTreeMap::new(),
+            failed: false,
         }
+    }
+
+    fn ok(&self) -> Result<()> {
+        if self.failed {
+            return Err(Error::Invalid(
+                "an earlier cluster write failed: the archive can't be finished".into(),
+            ));
+        }
+        Ok(())
     }
 
     pub fn compression(mut self, c: Compression) -> Self {
@@ -201,9 +283,10 @@ impl Creator {
 
     /// Add a blob to the compressed or uncompressed cluster, closing it first
     /// if this would overflow it. Returns (cluster serial, blob index).
-    fn add_data(&mut self, content: &[u8], compress: bool) -> Result<(u32, u32)> {
+    fn add_data(&mut self, content: Content, compress: bool) -> Result<(u32, u32)> {
+        let size = content.size()?;
         let open = if compress { &self.comp } else { &self.uncomp };
-        if !open.ends.is_empty() && open.size() + content.len() as u64 >= self.cluster_size as u64 {
+        if !open.ends.is_empty() && open.size() + size >= self.cluster_size as u64 {
             self.close_cluster(compress)?;
         }
         let open = if compress {
@@ -211,18 +294,17 @@ impl Creator {
         } else {
             &mut self.uncomp
         };
-        open.data.extend_from_slice(content);
-        open.ends.push(open.data.len() as u64);
+        open.ends.push(open.data_size() + size);
+        open.items.push(content);
         Ok((open.serial, open.ends.len() as u32 - 1))
     }
 
     // ponytail: compresses inline on one core (zstd level 19, as libzim); move
-    // cluster compression onto scoped threads when big builds matter.
+    // cluster compression onto worker threads when big builds matter.
     fn close_cluster(&mut self, compress: bool) -> Result<()> {
         let fresh = Open {
             serial: self.next_serial,
-            data: vec![],
-            ends: vec![],
+            ..Open::default()
         };
         self.next_serial += 1;
         let c = std::mem::replace(
@@ -233,40 +315,60 @@ impl Creator {
             },
             fresh,
         );
-        let extended = c.data.len() as u64 > u32::MAX as u64;
-        let w: u64 = if extended { 8 } else { 4 };
-        let table = w * (c.ends.len() as u64 + 1);
-        let mut raw = Vec::with_capacity(table as usize + c.data.len());
+        let n = c.ends.len() as u64 + 1;
+        let extended = 4 * n + c.data_size() > u32::MAX as u64;
+        let w = if extended { 8 } else { 4 };
+        let mut table = Vec::with_capacity((w * n) as usize);
         for off in std::iter::once(0).chain(c.ends.iter().copied()) {
             if extended {
-                raw.extend((off + table).to_le_bytes());
+                table.extend((off + w * n).to_le_bytes());
             } else {
-                raw.extend(((off + table) as u32).to_le_bytes());
+                table.extend(((off + w * n) as u32).to_le_bytes());
             }
         }
-        raw.extend_from_slice(&c.data);
-        drop(c.data);
         let comp = if compress {
             self.compression
         } else {
             Compression::None
         };
-        let (code, body) = match comp {
-            Compression::None => (1u8, raw),
-            Compression::Zstd => (5, zstd::encode_all(&raw[..], ZSTD_LEVEL)?),
-            Compression::Lzma => {
-                let mut v = vec![];
-                liblzma::read::XzEncoder::new(&raw[..], LZMA_PRESET).read_to_end(&mut v)?;
-                (4, v)
-            }
+        let code = match comp {
+            Compression::None => 1u8,
+            Compression::Lzma => 4,
+            Compression::Zstd => 5,
         };
+        self.failed = true; // until the cluster is fully written
         let f = self.out()?;
         let offset = f.stream_position()?;
         f.write_all(&[code | if extended { 0x10 } else { 0 }])?;
-        f.write_all(&body)?;
+        let body = |w: &mut dyn Write| -> Result<()> {
+            let mut w = w;
+            w.write_all(&table)?;
+            let mut start = 0;
+            for (item, &end) in c.items.iter().zip(&c.ends) {
+                item.write_to(&mut w, end - start)?;
+                start = end;
+            }
+            Ok(())
+        };
+        match comp {
+            Compression::None => body(f)?,
+            Compression::Zstd => {
+                let mut z = zstd::stream::Encoder::new(&mut *f, ZSTD_LEVEL)?;
+                // Known size: zstd sizes its tables to the cluster, not to level 19's max.
+                z.set_pledged_src_size(Some(w * n + c.data_size()))?;
+                body(&mut z)?;
+                z.finish()?;
+            }
+            Compression::Lzma => {
+                let mut x = liblzma::write::XzEncoder::new(&mut *f, LZMA_PRESET);
+                body(&mut x)?;
+                x.finish()?;
+            }
+        }
         let index = self.offsets.len() as u32;
         self.offsets.push(offset);
         self.closed.insert(c.serial, (index, offset));
+        self.failed = false;
         Ok(())
     }
 
@@ -276,6 +378,7 @@ impl Creator {
 
     /// Add user content (`C/<path>`).
     pub fn add_item(&mut self, item: Item) -> Result<()> {
+        self.ok()?;
         let mime = if item.mimetype.is_empty() {
             "application/octet-stream".to_string()
         } else {
@@ -285,7 +388,7 @@ impl Creator {
         let front = item.front.unwrap_or(mime.starts_with("text/html"));
         let compress = item.compress.unwrap_or(compressible(&mime));
         let m = self.mime(&mime)?;
-        let (cluster, blob) = self.add_data(&item.content, compress)?;
+        let (cluster, blob) = self.add_data(item.content, compress)?;
         let clean = &mime[..mime.find([';', ' ', '\t']).unwrap_or(mime.len())];
         if !clean.is_empty() {
             *self.counter.entry(clean.to_string()).or_default() += 1;
@@ -305,10 +408,16 @@ impl Creator {
     }
 
     /// Add `M/<name>`.
-    pub fn add_metadata(&mut self, name: &str, value: &[u8], mimetype: &str) -> Result<()> {
+    pub fn add_metadata(
+        &mut self,
+        name: &str,
+        value: impl Into<Content>,
+        mimetype: &str,
+    ) -> Result<()> {
+        self.ok()?;
         self.check_new(b'M', name, "")?;
         let m = self.mime(mimetype)?;
-        let (cluster, blob) = self.add_data(value, compressible(mimetype))?;
+        let (cluster, blob) = self.add_data(value.into(), compressible(mimetype))?;
         let target = Target::Item(m, cluster, blob);
         self.put(
             b'M',
@@ -323,7 +432,7 @@ impl Creator {
     }
 
     /// Add a PNG illustration (`M/Illustration_<w>x<h>@<scale>…`).
-    pub fn add_illustration(&mut self, i: &Illustration, png: &[u8]) -> Result<()> {
+    pub fn add_illustration(&mut self, i: &Illustration, png: impl Into<Content>) -> Result<()> {
         self.add_metadata(&i.name(), png, "image/png")
     }
 
@@ -335,6 +444,7 @@ impl Creator {
         target: &str,
         front: bool,
     ) -> Result<()> {
+        self.ok()?;
         let key = (b'C', target.as_bytes().to_vec());
         self.dirents.entry(key).or_insert(WDirent {
             title: vec![],
@@ -382,6 +492,7 @@ impl Creator {
 
     /// Sort, index and write everything; then the checksum, and rename into place.
     pub fn finish(mut self) -> Result<()> {
+        self.ok()?;
         const LISTING: &[u8] = b"listing/titleOrdered/v1";
         if let Some(main) = self.main_path.clone()
             && self.dirents.contains_key(&(b'C', main.as_bytes().to_vec()))
@@ -404,7 +515,7 @@ impl Creator {
         let counter = counter.join(";");
         self.check_new(b'M', "Counter", "")?;
         let m = self.mime("text/plain")?;
-        let (cluster, blob) = self.add_data(counter.as_bytes(), true)?;
+        let (cluster, blob) = self.add_data(counter.into(), true)?;
         self.put(
             b'M',
             "Counter",
@@ -450,7 +561,7 @@ impl Creator {
             .collect();
         fronts.sort_by(|a, b| a.0.cmp(b.0));
         let listing: Vec<u8> = fronts.iter().flat_map(|(_, i)| i.to_le_bytes()).collect();
-        let (cluster, blob) = self.add_data(&listing, false)?;
+        let (cluster, blob) = self.add_data(listing.into(), false)?;
         self.dirents.get_mut(&listing_key).unwrap().target =
             Target::Item(listing_mime, cluster, blob);
 

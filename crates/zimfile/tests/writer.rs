@@ -1,7 +1,7 @@
 //! Write archives with `Creator`, read them back with `Archive`.
 
 use std::path::{Path, PathBuf};
-use zimfile::{Archive, Check, Compression, Creator, Illustration, Item};
+use zimfile::{Archive, Check, Compression, Content, Creator, Illustration, Item};
 
 fn tmp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("zimfile-writer-{}", std::process::id()));
@@ -649,4 +649,137 @@ fn open_created_archive() {
         assert_missing(&a, missing);
     }
     assert!(a.entry_in('C', "non/existent/path").is_none());
+}
+
+/// Deterministic bytes that don't compress to nothing.
+fn noise(n: usize, seed: u32) -> Vec<u8> {
+    let mut x = seed.wrapping_mul(2654435761) | 1;
+    (0..n)
+        .map(|_| {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            x as u8
+        })
+        .collect()
+}
+
+#[test]
+fn streams_files() {
+    let jpeg = tmp("big.jpg");
+    let big = noise(5 << 20, 1); // larger than a cluster
+    std::fs::write(&jpeg, &big).unwrap();
+    let txt = tmp("notes.txt");
+    let text = "streamed text ".repeat(10_000);
+    std::fs::write(&txt, &text).unwrap();
+    for comp in [Compression::Zstd, Compression::Lzma, Compression::None] {
+        let p = tmp(&format!("streams_{comp:?}.zim"));
+        let mut c = Creator::new(&p).compression(comp).cluster_size(1 << 20);
+        c.add_item(Item::new("a.html", "A", "text/html", "<p>before</p>"))
+            .unwrap();
+        c.add_item(Item::new(
+            "big.jpg",
+            "",
+            "image/jpeg",
+            Content::File(jpeg.clone()),
+        ))
+        .unwrap();
+        c.add_item(Item::new(
+            "notes.txt",
+            "",
+            "text/plain",
+            Content::File(txt.clone()),
+        ))
+        .unwrap();
+        c.add_item(Item::new("small.jpg", "", "image/jpeg", vec![9u8; 100]))
+            .unwrap();
+        c.add_metadata("Notes", Content::File(txt.clone()), "text/plain")
+            .unwrap();
+        c.add_item(Item::new("z.html", "Z", "text/html", "<p>after</p>"))
+            .unwrap();
+        c.finish().unwrap();
+        let a = Archive::open(&p).unwrap();
+        for ch in Check::ALL {
+            a.check(ch)
+                .unwrap_or_else(|e| panic!("{comp:?} {ch:?}: {e}"));
+        }
+        let get = |path| a.entry_by_path(path).unwrap();
+        let e = get("big.jpg");
+        assert_eq!(a.item_size(&e).unwrap(), big.len() as u64, "{comp:?}");
+        assert_eq!(a.content(&e).unwrap(), big);
+        assert_eq!(
+            a.read(&e, 4 << 20, 10).unwrap(),
+            big[4 << 20..(4 << 20) + 10]
+        );
+        assert!(
+            a.direct_access(&e).is_some(),
+            "images are stored uncompressed"
+        );
+        let e = get("notes.txt");
+        assert_eq!(a.content(&e).unwrap(), text.as_bytes());
+        assert_eq!(a.read(&e, 14, 8).unwrap(), b"streamed");
+        assert_eq!(a.metadata("Notes").unwrap(), text.as_bytes());
+        assert_eq!(a.content(&get("small.jpg")).unwrap(), vec![9u8; 100]);
+        assert_eq!(a.content(&get("a.html")).unwrap(), b"<p>before</p>");
+        assert_eq!(a.content(&get("z.html")).unwrap(), b"<p>after</p>");
+    }
+}
+
+#[test]
+fn file_changed_before_finish() {
+    let f = tmp("changing.bin");
+    for (name, change) in [("shrunk", 10usize), ("grew", 30)] {
+        std::fs::write(&f, vec![1u8; 20]).unwrap();
+        let p = tmp(&format!("changed_{name}.zim"));
+        let mut c = Creator::new(&p);
+        c.add_item(Item::new(
+            "f.bin",
+            "",
+            "application/octet-stream",
+            Content::File(f.clone()),
+        ))
+        .unwrap();
+        std::fs::write(&f, vec![1u8; change]).unwrap();
+        let e = c.finish().unwrap_err();
+        assert!(
+            e.to_string().contains("size changed while writing"),
+            "{name}: {e}"
+        );
+        assert!(
+            !p.exists() && !tmp(&format!("changed_{name}.zim.tmp")).exists(),
+            "{name}"
+        );
+    }
+    // A missing file is refused up front.
+    let mut c = Creator::new(&tmp("missing.zim"));
+    let missing = Item::new("m", "", "image/png", Content::File(tmp("no-such-file")));
+    assert!(c.add_item(missing).is_err());
+}
+
+#[test]
+fn failed_cluster_write_poisons_the_creator() {
+    let f = tmp("poison.bin");
+    std::fs::write(&f, vec![1u8; 20]).unwrap();
+    let p = tmp("poisoned.zim");
+    let mut c = Creator::new(&p).cluster_size(10);
+    c.add_item(Item::new(
+        "f.bin",
+        "",
+        "image/png",
+        Content::File(f.clone()),
+    ))
+    .unwrap();
+    std::fs::write(&f, b"x").unwrap();
+    // The next uncompressed item closes the cluster holding f.bin: that fails…
+    assert!(
+        c.add_item(Item::new("g.png", "", "image/png", vec![2u8; 20]))
+            .is_err()
+    );
+    // …and so does everything after.
+    assert!(
+        c.add_item(Item::new("h.png", "", "image/png", vec![3u8; 5]))
+            .is_err()
+    );
+    assert!(c.finish().is_err());
+    assert!(!p.exists() && !tmp("poisoned.zim.tmp").exists());
 }
