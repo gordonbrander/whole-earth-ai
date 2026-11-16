@@ -39,11 +39,30 @@ mod ffi {
             query: &str,
             limit: u32,
         ) -> Result<Vec<Hit>>;
+        // The parity test's oracle.
+        #[allow(dead_code)]
+        fn title_range(
+            lib: &Library,
+            archive: usize,
+            query: &str,
+            limit: u32,
+        ) -> Result<Vec<String>>;
+        #[allow(dead_code)]
+        fn has_title_index(lib: &Library, archive: usize) -> Result<bool>;
+        #[allow(dead_code)]
+        fn all_entry_count(lib: &Library, archive: usize) -> Result<u32>;
+        #[allow(dead_code)]
+        fn main_path(lib: &Library, archive: usize) -> Result<String>;
+        #[allow(dead_code)]
+        fn content_at(lib: &Library, archive: usize, index: u32) -> Result<Vec<u8>>;
         fn suggest(lib: &Library, archive: usize, query: &str, limit: u32) -> Result<Vec<Hit>>;
     }
 }
 
 pub use ffi::{EntryInfo, Hit};
+
+#[cfg(test)]
+mod parity;
 use std::path::Path;
 
 pub type Error = cxx::Exception;

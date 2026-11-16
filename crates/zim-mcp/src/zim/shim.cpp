@@ -57,6 +57,26 @@ rust::Vec<uint8_t> content(const Library &lib, size_t a, rust::Str path) {
   return out;
 }
 
+// Archive::findByTitle: the title-prefix range, without Xapian.
+rust::Vec<rust::String> title_range(const Library &lib, size_t a, rust::Str query, uint32_t limit) {
+  rust::Vec<rust::String> out;
+  for (auto &e : lib.archives.at(a).findByTitle(s(query)).offset(0, limit)) out.push_back(rust::String(e.getPath()));
+  return out;
+}
+bool has_title_index(const Library &lib, size_t a) { return lib.archives.at(a).hasTitleIndex(); }
+uint32_t all_entry_count(const Library &lib, size_t a) { return lib.archives.at(a).getAllEntryCount(); }
+
+// Throws when there's no main page.
+rust::String main_path(const Library &lib, size_t a) { return lib.archives.at(a).getMainEntry().getPath(); }
+
+rust::Vec<uint8_t> content_at(const Library &lib, size_t a, uint32_t index) {
+  auto blob = lib.archives.at(a).getEntryByPath(index).getItem(true).getData();
+  rust::Vec<uint8_t> out;
+  out.reserve(blob.size());
+  for (size_t i = 0; i < blob.size(); i++) out.push_back(blob.data()[i]);
+  return out;
+}
+
 rust::Vec<Hit> fulltext_search(const Library &lib, rust::Slice<const size_t> archives, rust::Str query, uint32_t limit) {
   std::vector<zim::Archive> selected;
   for (auto a : archives) selected.push_back(lib.archives.at(a));

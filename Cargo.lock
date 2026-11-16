@@ -1994,6 +1994,7 @@ dependencies = [
  "sha2",
  "tokio",
  "ureq",
+ "zimfile",
 ]
 
 [[package]]
