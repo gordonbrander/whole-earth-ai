@@ -3,7 +3,6 @@
 //! database per index. Read and write only what those indexes use: the
 //! postlist, docdata and position tables.
 
-
 pub mod bitstream;
 pub mod btree;
 pub mod db;
