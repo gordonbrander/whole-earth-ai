@@ -31,7 +31,9 @@ pub struct Stats {
 
 pub struct Db {
     blocks: Blocks,
+    #[cfg_attr(not(test), allow(dead_code))] // checked in tests
     pub uuid: [u8; 16],
+    #[cfg_attr(not(test), allow(dead_code))]
     pub revision: u64,
     /// postlist, docdata, termlist, position, spelling, synonym.
     pub roots: [Root; 6],
@@ -171,6 +173,7 @@ impl Db {
         Ok(self.doclens.get_or_init(|| v))
     }
 
+    #[cfg(test)]
     pub fn blocksize(&self) -> usize {
         self.blocks.size
     }
@@ -238,6 +241,7 @@ impl Db {
     }
 
     /// (frequency, lower bound, upper bound) of a value slot.
+    #[cfg(test)]
     pub fn value_stats(&self, slot: u32) -> Result<Option<ValueStats>> {
         let Some(tag) = self.get(POSTLIST, &value_stats_key(slot))? else {
             return Ok(None);
@@ -287,6 +291,7 @@ impl Db {
 }
 
 /// A value slot's (frequency, lower bound, upper bound).
+#[cfg(test)]
 pub type ValueStats = (u32, Vec<u8>, Vec<u8>);
 
 /// A posting list (term or doclen), read one chunk at a time.
@@ -378,9 +383,6 @@ impl<'a> PostList<'a> {
         self.wdf
     }
 
-    pub fn at_end(&self) -> bool {
-        self.ended
-    }
 
     /// Advance to the next posting (the first, on the first call). False at the end.
     pub fn next(&mut self) -> Result<bool> {

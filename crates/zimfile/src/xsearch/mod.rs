@@ -2,9 +2,7 @@
 //! libzim (Xapian 1.4) searches them: [`Archive::search`] over
 //! `X/fulltext/xapian`, [`Archive::suggest`] over `X/title/xapian`.
 
-#[allow(dead_code)] // the writer uses the rest (W3)
 pub mod html;
-#[allow(dead_code)] // the writer uses the rest (W3)
 pub mod index;
 pub mod matcher;
 pub mod query;

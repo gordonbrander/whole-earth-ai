@@ -3,7 +3,6 @@
 //! database per index. Read and write only what those indexes use: the
 //! postlist, docdata and position tables.
 
-#![allow(dead_code)] // until search and the writer use all of it
 
 pub mod bitstream;
 pub mod btree;

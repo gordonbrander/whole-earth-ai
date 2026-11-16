@@ -86,3 +86,63 @@ fn suggest_matches_libzim() {
         assert_eq!(exact, 30, "{n}: suggestions differing from libzim");
     }
 }
+
+/// Write `a` again with `Creator::index`, like `examples/repack.rs`.
+fn repack(a: &Archive, dst: &std::path::Path) {
+    use std::collections::HashSet;
+    use zimfile::{Compression, Content, Creator, Item};
+    let mut c = Creator::new(dst)
+        .compression(Compression::None)
+        .index("eng");
+    let front: HashSet<u32> = a.front_articles().unwrap().into_iter().collect();
+    for i in a.by_path() {
+        let e = a.entry_at(i).unwrap();
+        match e.redirect {
+            Some(t) => {
+                let t = a.entry_at(t).unwrap();
+                c.add_redirection(&e.path, &e.title, &t.path, front.contains(&i))
+                    .unwrap();
+            }
+            None => {
+                let content = Content::Bytes(a.content(&e).unwrap());
+                let mut item = Item::new(&e.path, &e.title, &e.mimetype, content);
+                item.front = Some(front.contains(&i));
+                c.add_item(item).unwrap();
+            }
+        }
+    }
+    c.finish().unwrap();
+}
+
+/// An archive zimfile indexes searches like the original libzim indexed:
+/// the same suggestions, and the same search hits with the same scores
+/// (ties may come in another order: docids are assigned differently).
+#[test]
+fn written_indexes_match_libzim() {
+    let (a, n) = archives().pop().unwrap(); // nollywood: built by a current libzim
+    let out = std::env::temp_dir().join("zimfile-xapian-repack.zim");
+    repack(&a, &out);
+    let b = Archive::open(&out).unwrap();
+    assert!(b.has_fulltext_index() && b.has_title_index());
+    let exact = compare(&format!("{n}.suggest.txt"), |q| {
+        b.suggest(q, 10).into_iter().map(|e| e.path).collect()
+    });
+    assert_eq!(exact, 30);
+    for (q, _) in golden(&format!("{n}.search.txt")) {
+        let hits = |z: &Archive| {
+            let mut v: Vec<(String, String)> = z
+                .search(&q, 50)
+                .unwrap()
+                .into_iter()
+                .map(|h| (format!("{:.9}", h.score), h.entry.path))
+                .collect();
+            // The last score may be a tie cut differently: drop it.
+            let last = v.last().map(|x| x.0.clone());
+            v.retain(|x| Some(&x.0) != last.as_ref());
+            v.sort();
+            v
+        };
+        assert_eq!(hits(&a), hits(&b), "{q:?}");
+    }
+    std::fs::remove_file(&out).unwrap();
+}
