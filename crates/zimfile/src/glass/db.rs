@@ -36,6 +36,9 @@ pub struct Db {
     /// postlist, docdata, termlist, position, spelling, synonym.
     pub roots: [Root; 6],
     pub stats: Stats,
+    // ponytail: every document length in memory (4 bytes/doc) once searched;
+    // read them per document from the doclen list if that's too much.
+    doclens: std::sync::OnceLock<Vec<u32>>,
 }
 
 /// The key of a term's first postlist chunk, or (`did`) of a later one.
@@ -148,7 +151,24 @@ impl Db {
             revision,
             roots,
             stats,
+            doclens: Default::default(),
         })
+    }
+
+    /// Document lengths, indexed by docid (index 0 unused).
+    pub fn doclen_table(&self) -> Result<&[u32]> {
+        if let Some(v) = self.doclens.get() {
+            return Ok(v);
+        }
+        let mut v = vec![0; self.stats.last_docid as usize + 1];
+        if let Some(mut pl) = self.doclens()? {
+            while pl.next()? {
+                if let Some(x) = v.get_mut(pl.did() as usize) {
+                    *x = pl.wdf();
+                }
+            }
+        }
+        Ok(self.doclens.get_or_init(|| v))
     }
 
     pub fn blocksize(&self) -> usize {
